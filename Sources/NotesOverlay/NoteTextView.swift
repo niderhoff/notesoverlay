@@ -75,6 +75,9 @@ final class NoteTextView: NSTextView {
         textView.drawsBackground = false
         textView.textColor = .labelColor
         textView.insertionPointColor = .controlAccentColor
+        // Background only: the default also forces a text colour, which would repaint the
+        // transparent (hidden) Markdown markers whenever they are inside a selection.
+        textView.selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor]
         textView.applyFontSize(fontSize)
 
         let styler = MarkdownStyler(textView: textView, fontSize: fontSize)

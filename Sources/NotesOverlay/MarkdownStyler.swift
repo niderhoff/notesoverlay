@@ -184,7 +184,11 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         }
         if batch { storage.endEditing() }
 
-        textView.typingAttributes = baseAttributes()
+        // Not during the storage's own edit processing: NSTextView's setter consults the
+        // selection, which may still point into text that was just deleted → NSRangeException
+        // (caught by AppKit, leaving the view frozen). The selection-change path runs
+        // right after every edit and sets them then.
+        if !insideProcessEditing { textView.typingAttributes = baseAttributes() }
         // Hidden/substituted glyphs are decided at glyph generation, so when the
         // raw/rendered split moves (selection change, zoom) the glyphs must be rebuilt.
         // Inside the storage's own edit processing TextKit does that itself.
