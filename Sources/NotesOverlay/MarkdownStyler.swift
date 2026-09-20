@@ -42,17 +42,19 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         insideProcessEditing = false
     }
 
-    /// Call whenever the selection settles; re-renders when the raw/active paragraphs change.
+    /// Call whenever the selection settles; re-renders when the raw paragraph changes.
     func selectionDidChange() {
         guard let textView, let storage = textView.textStorage else { return }
-        let active = activeParagraphs(in: storage.string as NSString, selection: textView.selectedRange())
-        if active != lastActiveParagraphs { restyleAll() }
+        if activeParagraph(in: storage.string as NSString, of: textView) != lastActiveParagraphs { restyleAll() }
     }
 
-    private func activeParagraphs(in text: NSString, selection: NSRange) -> NSRange {
-        let location = min(max(selection.location, 0), text.length)
-        let length = min(selection.length, text.length - location)
-        return text.paragraphRange(for: NSRange(location: location, length: length))
+    /// The paragraph holding the caret (the moving end of a selection) is shown raw.
+    /// Only that one: a multi-line selection keeps its rendering, so nothing shifts
+    /// while dragging or pressing ⇧↓, and Select All + copy still yields raw Markdown.
+    private func activeParagraph(in text: NSString, of textView: NSTextView) -> NSRange {
+        let selection = textView.selectedRange()
+        let caret = textView.selectionAffinity == .upstream ? selection.location : NSMaxRange(selection)
+        return text.paragraphRange(for: NSRange(location: min(max(caret, 0), text.length), length: 0))
     }
 
     // MARK: Fonts & colours
@@ -92,7 +94,7 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
 
         let text = storage.string as NSString
         let full = NSRange(location: 0, length: text.length)
-        let active = activeParagraphs(in: text, selection: textView.selectedRange())
+        let active = activeParagraph(in: text, of: textView)
         lastActiveParagraphs = active
 
         let batch = !insideProcessEditing
@@ -105,8 +107,7 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             let paragraph = text.paragraphRange(for: NSRange(location: location, length: 0))
             var content = paragraph
             while content.length > 0, Self.isNewline(text.character(at: NSMaxRange(content) - 1)) { content.length -= 1 }
-            let isActive = NSIntersectionRange(paragraph, active).length > 0
-                || (active.length == 0 && active.location >= paragraph.location && active.location <= NSMaxRange(content))
+            let isActive = active.location >= paragraph.location && active.location <= NSMaxRange(content)
             style(paragraph: paragraph, content: content, text: text, storage: storage, active: isActive, inCodeBlock: &inCodeBlock)
             if paragraph.length == 0 { break }
             location = NSMaxRange(paragraph)
