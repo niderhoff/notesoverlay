@@ -12,7 +12,7 @@ Menu-bar-only macOS app, pure Swift + AppKit, no dependencies, no Xcode project.
 
 Notes are Markdown, rendered live: headings, **bold**, *italic*, ~~strike~~, `code`, fenced
 code blocks (``` or ~~~, drawn as a shaded band), `- ` bullets (drawn as •), `- [ ]` / `- [x]`
-tasks (☐ / ☑), `> ` quotes and `[links](url)`. Titles and file names use the first line with
+tasks (drawn as checkboxes), `> ` quotes and `[links](url)`. Titles and file names use the first line with
 its Markdown stripped. The line(s) your cursor is on show the raw source with the markers dimmed,
 so you always see what you are editing. The file on disk, and anything you copy or paste,
 is plain Markdown text; rendering never changes a character.

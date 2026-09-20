@@ -1,16 +1,61 @@
 import AppKit
 
 extension NSAttributedString.Key {
-    /// Marker characters that are drawn as nothing (zero-width) on inactive lines.
+    /// Marker characters hidden on rendered lines (transparent, collapsed to zero width).
     static let markdownHidden = NSAttributedString.Key("NotesOverlay.markdownHidden")
     /// A one-character String to draw instead of the character (e.g. "•" for "-").
     static let markdownGlyph = NSAttributedString.Key("NotesOverlay.markdownGlyph")
     /// Paragraph belongs to a fenced code block: MarkdownLayoutManager draws a full-width band.
     static let markdownCodeBlock = NSAttributedString.Key("NotesOverlay.markdownCodeBlock")
+    /// The "[" of a task item, drawn as a checkbox (value: Bool, checked). The character is
+    /// made transparent and widened with kerning; the box is painted over its cell.
+    static let markdownCheckbox = NSAttributedString.Key("NotesOverlay.markdownCheckbox")
 }
 
-/// Draws a full-width background band behind fenced code blocks.
+/// Draws a full-width background band behind fenced code blocks and paints task checkboxes.
 final class MarkdownLayoutManager: NSLayoutManager {
+    override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+        guard let storage = textStorage else { return }
+        let charRange = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        storage.enumerateAttribute(.markdownCheckbox, in: charRange, options: []) { value, range, _ in
+            guard let checked = value as? Bool else { return }
+            let glyphIndex = glyphIndexForCharacter(at: range.location)
+            guard glyphIndex < numberOfGlyphs else { return }
+            let font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? .systemFont(ofSize: 16)
+            let side = MarkdownStyler.checkboxSide(for: font.pointSize)
+            let fragment = lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+            let glyphOrigin = location(forGlyphAt: glyphIndex)
+            let x = origin.x + fragment.minX + glyphOrigin.x
+            let baseline = origin.y + fragment.minY + glyphOrigin.y
+            let box = NSRect(x: x, y: baseline - font.capHeight - (side - font.capHeight) / 2, width: side, height: side)
+            Self.drawCheckbox(in: box, checked: checked, color: .controlAccentColor)
+        }
+    }
+
+    private static func drawCheckbox(in box: NSRect, checked: Bool, color: NSColor) {
+        let stroke: CGFloat = max(1.5, box.width * 0.12)
+        let outline = NSBezierPath(roundedRect: box.insetBy(dx: stroke / 2, dy: stroke / 2),
+                                   xRadius: box.width * 0.28, yRadius: box.width * 0.28)
+        outline.lineWidth = stroke
+        if checked {
+            color.setFill()
+            outline.fill()
+            let check = NSBezierPath()
+            check.lineWidth = stroke
+            check.lineCapStyle = .round
+            check.lineJoinStyle = .round
+            check.move(to: NSPoint(x: box.minX + box.width * 0.26, y: box.minY + box.height * 0.52))
+            check.line(to: NSPoint(x: box.minX + box.width * 0.44, y: box.minY + box.height * 0.70))
+            check.line(to: NSPoint(x: box.minX + box.width * 0.76, y: box.minY + box.height * 0.32))
+            NSColor.white.setStroke()
+            check.stroke()
+        } else {
+            color.setStroke()
+            outline.stroke()
+        }
+    }
+
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         if let storage = textStorage, let container = textContainers.first {
             NSColor.labelColor.withAlphaComponent(0.07).setFill()
@@ -101,13 +146,10 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         NSFontManager.shared.convert(font, toHaveTrait: trait)
     }
 
-    /// A font that has the glyphs for ☐/☑, or nil to leave checkboxes raw.
-    private lazy var checkboxFont: NSFont? = {
-        for candidate in [NSFont.systemFont(ofSize: 10), NSFont(name: "Apple Symbols", size: 10), NSFont(name: "Menlo", size: 10)] {
-            if let f = candidate, Self.glyph(for: "☐", in: f) != nil, Self.glyph(for: "☑", in: f) != nil { return f }
-        }
-        return nil
-    }()
+    /// Width of the column that holds a list marker (bullet, checkbox, number); the item's
+    /// text starts right after it, so all list kinds align.
+    private var listMarkerArea: CGFloat { (baseFontSize * 1.6).rounded() }
+    static func checkboxSide(for fontSize: CGFloat) -> CGFloat { (fontSize * 0.8).rounded() }
 
     private func baseAttributes() -> [NSAttributedString.Key: Any] {
         [.font: baseFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: NSParagraphStyle.default]
@@ -156,6 +198,23 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         c == 0x0A || c == 0x0D || c == 0x2028 || c == 0x2029
     }
 
+    /// Hides `range`: each glyph is drawn transparent and given a kern of minus its own
+    /// advance, so it takes no width. Per character, because a single large negative kern
+    /// would give one glyph a negative advance that the typesetter clamps to zero. (Null
+    /// glyphs would be cleaner, but at a paragraph start followed by a kerned glyph the
+    /// typesetter absorbs them into the previous line and lays the rest out as a
+    /// continuation line.)
+    private func hide(_ range: NSRange, storage: NSTextStorage, text: NSString) {
+        guard range.length > 0 else { return }
+        let font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? baseFont
+        storage.addAttributes([.markdownHidden: true, .foregroundColor: NSColor.clear], range: range)
+        for index in range.location..<NSMaxRange(range) {
+            let one = NSRange(location: index, length: 1)
+            let advance = text.substring(with: one).size(withAttributes: [.font: font]).width
+            storage.addAttribute(.kern, value: -advance, range: one)
+        }
+    }
+
     // MARK: Block level
 
     /// A line that is only a fence (2+ backticks or 3+ tildes) plus an optional language.
@@ -179,9 +238,13 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         func absolute(_ r: NSRange) -> NSRange { NSRange(location: r.location + offset, length: r.length) }
         func marker(_ r: NSRange, font: NSFont? = nil) {
             guard r.length > 0 else { return }
-            var attrs: [NSAttributedString.Key: Any] = active ? [.foregroundColor: markerColor] : [.markdownHidden: true]
-            if let font { attrs[.font] = font }
-            storage.addAttributes(attrs, range: absolute(r))
+            let abs = absolute(r)
+            if let font { storage.addAttribute(.font, value: font, range: abs) }
+            if active {
+                storage.addAttribute(.foregroundColor, value: markerColor, range: abs)
+            } else {
+                hide(abs, storage: storage, text: text)
+            }
         }
         func width(_ s: String, _ font: NSFont) -> CGFloat {
             (s as NSString).size(withAttributes: [.font: font]).width
@@ -205,37 +268,63 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             marker(m.range, font: contentFont)
             paragraphStyle.paragraphSpacingBefore = baseFontSize * (level <= 2 ? 0.6 : 0.3)
             contentStart = m.range.length
-        } else if let m = Self.task.firstMatch(in: line, range: lineRange), let boxFont = checkboxFont {
-            let indent = line.prefix(m.range(at: 1).length)
+        } else if let m = Self.task.firstMatch(in: line, range: lineRange) {
+            let indentWidth = width(String(line.prefix(m.range(at: 1).length)), baseFont)
+            let spaceWidth = width(" ", baseFont)
             let checked = line[Range(m.range(at: 4), in: line)!].lowercased() == "x"
-            // "- [ ] " → hide "- ", draw "[" as a checkbox, hide " " / "x" and "]".
-            marker(NSRange(location: m.range(at: 2).location, length: 2))
+            let bracket = m.range(at: 3)
+            marker(NSRange(location: m.range(at: 2).location, length: 2)) // "- "
             if active {
-                marker(NSRange(location: m.range(at: 3).location, length: 3))
-                storage.addAttribute(.foregroundColor, value: listColor, range: absolute(NSRange(location: m.range(at: 3).location, length: 3)))
+                let raw = NSRange(location: bracket.location, length: 3) // "[ ]"
+                marker(raw)
+                storage.addAttribute(.foregroundColor, value: listColor, range: absolute(raw))
+                paragraphStyle.headIndent = width(String(line.prefix(m.range.length)), baseFont)
             } else {
-                let box = boxFont.withSize(baseFontSize)
-                storage.addAttributes([.markdownGlyph: checked ? "☑" : "☐", .font: box, .foregroundColor: listColor], range: absolute(m.range(at: 3)))
-                storage.addAttribute(.markdownHidden, value: true, range: absolute(NSRange(location: m.range(at: 4).location, length: 2)))
+                // "[" becomes a transparent cell as wide as the box; " ]" vanish.
+                let side = Self.checkboxSide(for: baseFontSize)
+                storage.addAttributes([.markdownCheckbox: checked, .foregroundColor: NSColor.clear,
+                                       .kern: side - width("[", baseFont)], range: absolute(bracket))
+                hide(absolute(NSRange(location: m.range(at: 4).location, length: 2)), storage: storage, text: text)
+                let firstIndent = max(0, (listMarkerArea - side) / 2)
+                paragraphStyle.firstLineHeadIndent = firstIndent
+                paragraphStyle.headIndent = indentWidth + listMarkerArea
+                storage.addAttribute(.kern, value: listMarkerArea - firstIndent - side - spaceWidth,
+                                     range: absolute(NSRange(location: NSMaxRange(m.range(at: 5)), length: 1)))
                 if checked {
-                    storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: absolute(NSRange(location: m.range.length, length: content.length - m.range.length)))
+                    storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor,
+                                         range: absolute(NSRange(location: m.range.length, length: content.length - m.range.length)))
                 }
             }
-            let hang = width(String(indent), baseFont) + width("☐ ", boxFont.withSize(baseFontSize))
-            paragraphStyle.headIndent = hang
             contentStart = m.range.length
         } else if let m = Self.bullet.firstMatch(in: line, range: lineRange) {
-            let indent = line.prefix(m.range(at: 1).length)
+            let indentWidth = width(String(line.prefix(m.range(at: 1).length)), baseFont)
+            let spaceWidth = width(" ", baseFont)
+            let dash = m.range(at: 2)
             if active {
-                storage.addAttribute(.foregroundColor, value: listColor, range: absolute(m.range(at: 2)))
+                storage.addAttribute(.foregroundColor, value: listColor, range: absolute(dash))
+                paragraphStyle.headIndent = width(String(line.prefix(m.range.length)), baseFont)
             } else {
-                storage.addAttributes([.markdownGlyph: "•", .font: bulletFont, .foregroundColor: listColor], range: absolute(m.range(at: 2)))
+                let dotWidth = width("•", bulletFont)
+                storage.addAttributes([.markdownGlyph: "•", .font: bulletFont, .foregroundColor: listColor], range: absolute(dash))
+                let firstIndent = max(0, (listMarkerArea - dotWidth) / 2)
+                paragraphStyle.firstLineHeadIndent = firstIndent
+                paragraphStyle.headIndent = indentWidth + listMarkerArea
+                storage.addAttribute(.kern, value: listMarkerArea - firstIndent - dotWidth - spaceWidth,
+                                     range: absolute(NSRange(location: NSMaxRange(dash), length: 1)))
             }
-            paragraphStyle.headIndent = width(String(indent), baseFont) + width("• ", bulletFont)
             contentStart = m.range.length
         } else if let m = Self.ordered.firstMatch(in: line, range: lineRange) {
-            storage.addAttribute(.foregroundColor, value: listColor, range: absolute(m.range(at: 2)))
-            paragraphStyle.headIndent = width(line.prefix(m.range.length).description, baseFont)
+            let indentWidth = width(String(line.prefix(m.range(at: 1).length)), baseFont)
+            let spaceWidth = width(" ", baseFont)
+            let number = m.range(at: 2)
+            let numberWidth = width(String(line[Range(number, in: line)!]), baseFont)
+            storage.addAttribute(.foregroundColor, value: listColor, range: absolute(number))
+            // Numbers end a small gap before the text column, so they right-align.
+            let firstIndent = max(0, listMarkerArea - baseFontSize * 0.4 - numberWidth)
+            paragraphStyle.firstLineHeadIndent = firstIndent
+            paragraphStyle.headIndent = indentWidth + listMarkerArea
+            storage.addAttribute(.kern, value: max(0, listMarkerArea - firstIndent - numberWidth - spaceWidth),
+                                 range: absolute(NSRange(location: NSMaxRange(number), length: 1)))
             contentStart = m.range.length
         } else if let m = Self.quote.firstMatch(in: line, range: lineRange) {
             marker(m.range)
@@ -250,7 +339,7 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         }
 
         storage.addAttribute(.paragraphStyle, value: paragraphStyle, range: paragraph)
-        applyInline(line: line, from: contentStart, offset: offset, storage: storage, active: active)
+        applyInline(line: line, from: contentStart, offset: offset, storage: storage, text: text, active: active)
     }
 
     // MARK: Inline
@@ -262,7 +351,7 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
     private static let italic = try! NSRegularExpression(pattern: #"(?<![*\w])(\*|_)(?=\S)(.+?)(?<=\S)\1(?![*\w])"#)
     private static let strike = try! NSRegularExpression(pattern: #"~~(?=\S)(.+?)(?<=\S)~~"#)
 
-    private func applyInline(line: String, from start: Int, offset: Int, storage: NSTextStorage, active: Bool) {
+    private func applyInline(line: String, from start: Int, offset: Int, storage: NSTextStorage, text: NSString, active: Bool) {
         let ns = line as NSString
         guard start < ns.length else { return }
         let masked = NSMutableString(string: line)
@@ -274,7 +363,11 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         }
         func marker(_ r: NSRange) {
             guard r.length > 0 else { return }
-            storage.addAttributes(active ? [.foregroundColor: markerColor] : [.markdownHidden: true], range: absolute(r))
+            if active {
+                storage.addAttribute(.foregroundColor, value: markerColor, range: absolute(r))
+            } else {
+                hide(absolute(r), storage: storage, text: text)
+            }
             mask(r)
         }
         func addTrait(_ trait: NSFontTraitMask, in r: NSRange) {
@@ -362,16 +455,13 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         guard let storage = layoutManager.textStorage else { return 0 }
         let count = glyphRange.length
         var newGlyphs = Array(UnsafeBufferPointer(start: glyphs, count: count))
-        var newProperties = Array(UnsafeBufferPointer(start: properties, count: count))
+        let newProperties = Array(UnsafeBufferPointer(start: properties, count: count))
         var changed = false
         for i in 0..<count {
             let index = characterIndexes[i]
             guard index < storage.length else { continue }
-            let attrs = storage.attributes(at: index, effectiveRange: nil)
-            if attrs[.markdownHidden] != nil {
-                newProperties[i] = .null
-                changed = true
-            } else if let replacement = attrs[.markdownGlyph] as? String, let glyph = Self.glyph(for: replacement, in: font) {
+            if let replacement = storage.attribute(.markdownGlyph, at: index, effectiveRange: nil) as? String,
+               let glyph = Self.glyph(for: replacement, in: font) {
                 newGlyphs[i] = glyph
                 changed = true
             }
