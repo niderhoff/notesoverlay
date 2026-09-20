@@ -243,6 +243,11 @@ final class TitlebarButton: NSButton {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// Frame == alignment rect, so the 24×24 constraint is the drawn hover square for
+    /// every symbol; NSButton's default insets vary with the image and made the
+    /// pencil button's highlight taller than the list button's.
+    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsets() }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
