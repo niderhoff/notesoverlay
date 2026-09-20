@@ -28,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         panel.textView.onFontSizeChange = { Settings.fontSize = $0 }
         panel.textView.onSwitcher = { [weak self] in self?.toggleSwitcher() }
         panel.textView.onNewNote = { [weak self] in self?.createNote(titled: nil) }
+        panel.onNewNoteButton = { [weak self] in self?.createNote(titled: nil) }
+        panel.onSwitcherButton = { [weak self] in self?.toggleSwitcher() }
 
         openInitialNote()
 
@@ -42,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        commitCurrentNote()
+        if !discardCurrentNoteIfEmpty() { commitCurrentNote() }
     }
 
     // MARK: Notes
@@ -61,8 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     /// Loads `url` into the editor. Does not touch the switcher; callers decide.
     private func open(_ url: URL) {
         if let store, store.fileURL == url { return }
-        commitCurrentNote()
-        store?.discard()
+        if !discardCurrentNoteIfEmpty() {
+            commitCurrentNote()
+            store?.discard()
+        }
 
         let newStore = NoteStore(url: url)
         let text = newStore.load()
@@ -80,7 +84,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         Settings.markOpened(url.lastPathComponent)
     }
 
+    /// `title` nil = ⌘N. An empty note is never duplicated: ⌘N on an empty note stays
+    /// there, and an existing empty note is reused before a new file is created.
     private func createNote(titled title: String?) {
+        if title == nil {
+            if store != nil, currentTextIsEmpty {
+                panel.dismissSwitcher()
+                showPanel()
+                return
+            }
+            if let empty = library.notes().first(where: \.isEmpty) {
+                open(empty.url)
+                panel.dismissSwitcher()
+                showPanel()
+                return
+            }
+        }
         do {
             let url = try library.create(title: title)
             open(url)
@@ -112,6 +131,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
             }
         }
         refreshSwitcher()
+    }
+
+    private var currentTextIsEmpty: Bool {
+        panel.textView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Deletes the current note when it is empty, unpinned, and not the only note, so
+    /// switching around never leaves "Untitled" files behind. Returns true if removed;
+    /// the editor then has no note until `open` is called.
+    @discardableResult
+    private func discardCurrentNoteIfEmpty() -> Bool {
+        guard let store, currentTextIsEmpty,
+              !Settings.pinnedNotes.contains(store.fileURL.lastPathComponent),
+              library.notes().contains(where: { $0.url != store.fileURL })
+        else { return false }
+        store.discard()
+        do {
+            try FileManager.default.removeItem(at: store.fileURL)
+        } catch {
+            NSLog("NotesOverlay: could not remove empty note \(store.fileURL.lastPathComponent): \(error)")
+        }
+        Settings.removeMetadata(for: store.fileURL.lastPathComponent)
+        self.store = nil
+        return true
     }
 
     /// Saves pending text and renames the file to match the note's first line.
@@ -202,7 +245,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
 
     private func hidePanel() {
         panel.dismissSwitcher()
-        commitCurrentNote()
+        if discardCurrentNoteIfEmpty() {
+            // Load the most recent remaining note into the (hidden) editor.
+            if let next = library.notes().first { open(next.url) }
+        } else {
+            commitCurrentNote()
+        }
         panel.hide()
     }
 

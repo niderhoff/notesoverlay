@@ -9,6 +9,13 @@ final class NotePanel: NSPanel {
     private let scrollView: NSScrollView
     private let footerLabel = NSTextField(labelWithString: "")
 
+    /// Title-bar buttons (mouse controls, shown only while hovering).
+    var onNewNoteButton: (() -> Void)?
+    var onSwitcherButton: (() -> Void)?
+    private let titlebarButtons = NSTitlebarAccessoryViewController()
+    private var noteTitle = "Untitled"
+    private(set) var isChromeVisible = false
+
     init(fontSize: CGFloat) {
         let pair = NoteTextView.makeScrollable(fontSize: fontSize)
         scrollView = pair.scrollView
@@ -62,9 +69,66 @@ final class NotePanel: NSPanel {
             footerLabel.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -8),
         ])
 
+        installTitlebarButtons()
+        // .activeAlways: this app is never the active app, yet hover must still work.
+        background.addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
+
         center()
         _ = setFrameAutosaveName(Self.frameAutosaveName) // restores a saved frame immediately
         updateChrome()
+        setChrome(visible: false)
+    }
+
+    // MARK: Hover chrome
+
+    private func installTitlebarButtons() {
+        let newButton = makeTitlebarButton("square.and.pencil", tip: "New Note (⌘N)", action: #selector(newNoteTapped))
+        let switchButton = makeTitlebarButton("list.bullet", tip: "Switch Note (⌘P)", action: #selector(switcherTapped))
+        let stack = NSStackView(views: [newButton, switchButton])
+        stack.orientation = .horizontal
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 8)
+        stack.frame = NSRect(x: 0, y: 0, width: 68, height: 28)
+        titlebarButtons.view = stack
+        titlebarButtons.layoutAttribute = .trailing
+        addTitlebarAccessoryViewController(titlebarButtons)
+    }
+
+    private func makeTitlebarButton(_ symbol: String, tip: String, action: Selector) -> NSButton {
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)!
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .medium))!
+        let button = FirstMouseButton(image: image, target: self, action: action)
+        button.isBordered = false
+        button.contentTintColor = .secondaryLabelColor
+        button.toolTip = tip
+        button.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        return button
+    }
+
+    @objc private func newNoteTapped() { onNewNoteButton?() }
+    @objc private func switcherTapped() { onSwitcherButton?() }
+
+    /// Close button, title, and the ⌘N/⌘P buttons are mouse controls: visible only
+    /// while the pointer is over the window. The strip stays draggable either way.
+    func setChrome(visible: Bool) {
+        isChromeVisible = visible
+        standardWindowButton(.closeButton)?.isHidden = !visible
+        titlebarButtons.isHidden = !visible
+        title = visible ? noteTitle : ""
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        setChrome(visible: true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        setChrome(visible: false)
     }
 
     override var canBecomeKey: Bool { true }
@@ -112,19 +176,28 @@ final class NotePanel: NSPanel {
     func show() {
         makeKeyAndOrderFront(nil)
         makeFirstResponder(textView)
+        // No mouseEntered fires if the pointer is already inside when we appear.
+        setChrome(visible: frame.contains(NSEvent.mouseLocation))
     }
 
     func hide() {
         orderOut(nil)
+        setChrome(visible: false)
     }
 
     /// Title = first non-empty line, footer = character count.
     func updateChrome() {
         let text = textView.string
-        let noteTitle = NoteLibrary.title(of: text)
-        title = noteTitle.count > 40 ? String(noteTitle.prefix(40)) + "…" : noteTitle
+        let full = NoteLibrary.title(of: text)
+        noteTitle = full.count > 40 ? String(full.prefix(40)) + "…" : full
+        if isChromeVisible { title = noteTitle }
 
         let count = text.count
         footerLabel.stringValue = count == 1 ? "1 character" : "\(count) characters"
     }
+}
+
+/// Reacts to the first click even when the panel is not the key window.
+final class FirstMouseButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

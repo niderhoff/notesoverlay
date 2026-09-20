@@ -7,6 +7,8 @@ struct NoteInfo: Equatable {
     let modified: Date
     let lastOpened: Date?
     let pinned: Bool
+    /// Nothing but whitespace in the file.
+    let isEmpty: Bool
     /// Lowercased title + beginning of the content, for fuzzy search.
     let searchText: String
 
@@ -77,6 +79,7 @@ final class NoteLibrary {
                 modified: modified,
                 lastOpened: opened[url.lastPathComponent],
                 pinned: pinned.contains(url.lastPathComponent),
+                isEmpty: content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 searchText: (title + "\n" + content.prefix(2000)).lowercased()
             ))
         }
