@@ -218,6 +218,7 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         if !insideProcessEditing, let layoutManager = textView.layoutManager {
             layoutManager.invalidateGlyphs(forCharacterRange: full, changeInLength: 0, actualCharacterRange: nil)
             layoutManager.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
+            textView.needsDisplay = true
         }
         textView.window?.invalidateCursorRects(for: textView) // checkbox hand cursors moved
     }

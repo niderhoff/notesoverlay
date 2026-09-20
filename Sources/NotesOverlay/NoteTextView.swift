@@ -24,6 +24,7 @@ final class NoteTextView: NSTextView {
         set {
             super.string = newValue
             applyFontSize(currentFontSize)
+            needsDisplay = true
         }
     }
 
@@ -224,6 +225,15 @@ final class NoteTextView: NSTextView {
     func applyAccent() {
         insertionPointColor = Settings.accent.color
         markdown?.restyleAll()
+        needsDisplay = true
+    }
+
+    /// When text shrinks, NSTextView clears the area below the new text starting one
+    /// `textContainerInset` too low, leaving a band of stale pixels (the "ghost line"
+    /// after deleting a line break in front of a wrapped paragraph). Redrawing the
+    /// whole view on every change is cheap for a note and side-steps that.
+    override func didChangeText() {
+        super.didChangeText()
         needsDisplay = true
     }
 
