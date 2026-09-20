@@ -89,6 +89,8 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
     /// Markers on the raw (caret) line: readable, but clearly not content.
     private var markerColor: NSColor { .secondaryLabelColor }
     private var bulletFont: NSFont { .boldSystemFont(ofSize: baseFontSize) }
+    /// List markers (bullets, checkboxes, numbers) follow the system accent colour.
+    private var listColor: NSColor { .controlAccentColor }
 
     private func headingFont(level: Int) -> NSFont {
         let scale: CGFloat = [1.5, 1.3, 1.15, 1.0, 1.0, 1.0][min(max(level, 1), 6) - 1]
@@ -210,9 +212,10 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             marker(NSRange(location: m.range(at: 2).location, length: 2))
             if active {
                 marker(NSRange(location: m.range(at: 3).location, length: 3))
+                storage.addAttribute(.foregroundColor, value: listColor, range: absolute(NSRange(location: m.range(at: 3).location, length: 3)))
             } else {
                 let box = boxFont.withSize(baseFontSize)
-                storage.addAttributes([.markdownGlyph: checked ? "☑" : "☐", .font: box], range: absolute(m.range(at: 3)))
+                storage.addAttributes([.markdownGlyph: checked ? "☑" : "☐", .font: box, .foregroundColor: listColor], range: absolute(m.range(at: 3)))
                 storage.addAttribute(.markdownHidden, value: true, range: absolute(NSRange(location: m.range(at: 4).location, length: 2)))
                 if checked {
                     storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: absolute(NSRange(location: m.range.length, length: content.length - m.range.length)))
@@ -224,14 +227,14 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         } else if let m = Self.bullet.firstMatch(in: line, range: lineRange) {
             let indent = line.prefix(m.range(at: 1).length)
             if active {
-                marker(m.range(at: 2))
+                storage.addAttribute(.foregroundColor, value: listColor, range: absolute(m.range(at: 2)))
             } else {
-                storage.addAttributes([.markdownGlyph: "•", .font: bulletFont], range: absolute(m.range(at: 2)))
+                storage.addAttributes([.markdownGlyph: "•", .font: bulletFont, .foregroundColor: listColor], range: absolute(m.range(at: 2)))
             }
             paragraphStyle.headIndent = width(String(indent), baseFont) + width("• ", bulletFont)
             contentStart = m.range.length
         } else if let m = Self.ordered.firstMatch(in: line, range: lineRange) {
-            storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: absolute(m.range(at: 2)))
+            storage.addAttribute(.foregroundColor, value: listColor, range: absolute(m.range(at: 2)))
             paragraphStyle.headIndent = width(line.prefix(m.range.length).description, baseFont)
             contentStart = m.range.length
         } else if let m = Self.quote.firstMatch(in: line, range: lineRange) {
