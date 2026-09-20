@@ -144,7 +144,24 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
     private var listMarkerArea: CGFloat { (baseFontSize * 1.6).rounded() }
     static func checkboxSide(for fontSize: CGFloat) -> CGFloat { (fontSize * 0.95).rounded() }
     /// Extra space after each list item (also on the raw line, so nothing jumps).
-    private var listParagraphSpacing: CGFloat { (baseFontSize * 0.35).rounded() }
+    private var listParagraphSpacing: CGFloat { (baseFontSize * 0.6).rounded() }
+    /// Horizontal step per nesting level (2 spaces or 1 tab in the source).
+    private var listIndentStep: CGFloat { (baseFontSize * 1.4).rounded() }
+
+    /// Bullets cycle by depth: • ○ ▪, skipping glyphs the system font lacks.
+    private lazy var bulletGlyphs: [String] = {
+        let probe = NSFont.boldSystemFont(ofSize: 16)
+        let available = ["•", "◦", "▪"].filter { Self.glyph(for: $0, in: probe) != nil }
+        return available.isEmpty ? ["•"] : available
+    }()
+
+    private func bulletGlyph(level: Int) -> String { bulletGlyphs[level % bulletGlyphs.count] }
+
+    private static func listLevel(of indent: Substring) -> Int {
+        var tabs = 0, spaces = 0
+        for ch in indent { if ch == "\t" { tabs += 1 } else { spaces += 1 } }
+        return tabs + spaces / 2
+    }
 
     private func baseAttributes() -> [NSAttributedString.Key: Any] {
         [.font: baseFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: NSParagraphStyle.default]
@@ -267,9 +284,12 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             storage.addAttribute(.font, value: contentFont, range: absolute(lineRange))
             marker(m.range, font: contentFont)
             paragraphStyle.paragraphSpacingBefore = baseFontSize * (level <= 2 ? 0.6 : 0.3)
+            paragraphStyle.paragraphSpacing = baseFontSize * 0.35
             contentStart = m.range.length
         } else if let m = Self.task.firstMatch(in: line, range: lineRange) {
-            let indentWidth = width(String(line.prefix(m.range(at: 1).length)), baseFont)
+            let indentText = line.prefix(m.range(at: 1).length)
+            let rawIndentWidth = width(String(indentText), baseFont)
+            let levelIndent = CGFloat(Self.listLevel(of: indentText)) * listIndentStep
             let spaceWidth = width(" ", baseFont)
             let checked = line[Range(m.range(at: 4), in: line)!].lowercased() == "x"
             let bracket = m.range(at: 3)
@@ -286,10 +306,10 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
                 storage.addAttributes([.markdownCheckbox: checked, .foregroundColor: NSColor.clear,
                                        .kern: side - width("[", baseFont)], range: absolute(bracket))
                 hide(absolute(NSRange(location: m.range(at: 4).location, length: 2)), storage: storage, text: text)
-                let firstIndent = max(0, (listMarkerArea - side) / 2)
+                let firstIndent = max(0, levelIndent + (listMarkerArea - side) / 2 - rawIndentWidth)
                 paragraphStyle.firstLineHeadIndent = firstIndent
-                paragraphStyle.headIndent = indentWidth + listMarkerArea
-                storage.addAttribute(.kern, value: listMarkerArea - firstIndent - side - spaceWidth,
+                paragraphStyle.headIndent = levelIndent + listMarkerArea
+                storage.addAttribute(.kern, value: levelIndent + listMarkerArea - firstIndent - rawIndentWidth - side - spaceWidth,
                                      range: absolute(NSRange(location: NSMaxRange(m.range(at: 5)), length: 1)))
                 if checked {
                     storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor,
@@ -298,7 +318,10 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             }
             contentStart = m.range.length
         } else if let m = Self.bullet.firstMatch(in: line, range: lineRange) {
-            let indentWidth = width(String(line.prefix(m.range(at: 1).length)), baseFont)
+            let indentText = line.prefix(m.range(at: 1).length)
+            let rawIndentWidth = width(String(indentText), baseFont)
+            let level = Self.listLevel(of: indentText)
+            let levelIndent = CGFloat(level) * listIndentStep
             let spaceWidth = width(" ", baseFont)
             let dash = m.range(at: 2)
             paragraphStyle.paragraphSpacing = listParagraphSpacing
@@ -306,27 +329,30 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
                 storage.addAttribute(.foregroundColor, value: listColor, range: absolute(dash))
                 paragraphStyle.headIndent = width(String(line.prefix(m.range.length)), baseFont)
             } else {
-                let dotWidth = width("•", bulletFont)
-                storage.addAttributes([.markdownGlyph: "•", .font: bulletFont, .foregroundColor: listColor], range: absolute(dash))
-                let firstIndent = max(0, (listMarkerArea - dotWidth) / 2)
+                let glyph = bulletGlyph(level: level)
+                let dotWidth = width(glyph, bulletFont)
+                storage.addAttributes([.markdownGlyph: glyph, .font: bulletFont, .foregroundColor: listColor], range: absolute(dash))
+                let firstIndent = max(0, levelIndent + (listMarkerArea - dotWidth) / 2 - rawIndentWidth)
                 paragraphStyle.firstLineHeadIndent = firstIndent
-                paragraphStyle.headIndent = indentWidth + listMarkerArea
-                storage.addAttribute(.kern, value: listMarkerArea - firstIndent - dotWidth - spaceWidth,
+                paragraphStyle.headIndent = levelIndent + listMarkerArea
+                storage.addAttribute(.kern, value: levelIndent + listMarkerArea - firstIndent - rawIndentWidth - dotWidth - spaceWidth,
                                      range: absolute(NSRange(location: NSMaxRange(dash), length: 1)))
             }
             contentStart = m.range.length
         } else if let m = Self.ordered.firstMatch(in: line, range: lineRange) {
-            let indentWidth = width(String(line.prefix(m.range(at: 1).length)), baseFont)
+            let indentText = line.prefix(m.range(at: 1).length)
+            let rawIndentWidth = width(String(indentText), baseFont)
+            let levelIndent = CGFloat(Self.listLevel(of: indentText)) * listIndentStep
             let spaceWidth = width(" ", baseFont)
             let number = m.range(at: 2)
             let numberWidth = width(String(line[Range(number, in: line)!]), baseFont)
             paragraphStyle.paragraphSpacing = listParagraphSpacing
             storage.addAttribute(.foregroundColor, value: listColor, range: absolute(number))
             // Numbers end a small gap before the text column, so they right-align.
-            let firstIndent = max(0, listMarkerArea - baseFontSize * 0.4 - numberWidth)
+            let firstIndent = max(0, levelIndent + listMarkerArea - baseFontSize * 0.4 - numberWidth - rawIndentWidth)
             paragraphStyle.firstLineHeadIndent = firstIndent
-            paragraphStyle.headIndent = indentWidth + listMarkerArea
-            storage.addAttribute(.kern, value: max(0, listMarkerArea - firstIndent - numberWidth - spaceWidth),
+            paragraphStyle.headIndent = levelIndent + listMarkerArea
+            storage.addAttribute(.kern, value: max(0, levelIndent + listMarkerArea - firstIndent - rawIndentWidth - numberWidth - spaceWidth),
                                  range: absolute(NSRange(location: NSMaxRange(number), length: 1)))
             contentStart = m.range.length
         } else if let m = Self.quote.firstMatch(in: line, range: lineRange) {
