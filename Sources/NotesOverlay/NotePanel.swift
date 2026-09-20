@@ -62,16 +62,24 @@ final class NotePanel: NSPanel {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         background.addSubview(titleLabel)
 
-        // contentLayoutGuide excludes the (transparent) title bar.
+        // contentLayoutGuide excludes the (transparent) title bar; `bar` is that band,
+        // whatever height this macOS gives it.
         let guide = contentLayoutGuide as! NSLayoutGuide
+        let bar = NSLayoutGuide()
+        background.addLayoutGuide(bar)
         NSLayoutConstraint.activate([
+            bar.topAnchor.constraint(equalTo: background.topAnchor),
+            bar.bottomAnchor.constraint(equalTo: guide.topAnchor),
+            bar.leadingAnchor.constraint(equalTo: background.leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: background.trailingAnchor),
+
             scrollView.topAnchor.constraint(equalTo: guide.topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: background.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: background.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: background.bottomAnchor),
             // Centred in the title bar band, clear of the close button and the ⌘N/⌘P buttons.
-            titleLabel.centerXAnchor.constraint(equalTo: background.centerXAnchor),
-            titleLabel.centerYAnchor.constraint(equalTo: guide.topAnchor, constant: -14),
+            titleLabel.centerXAnchor.constraint(equalTo: bar.centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
             titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: background.leadingAnchor, constant: 72),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: background.trailingAnchor, constant: -72),
         ])
