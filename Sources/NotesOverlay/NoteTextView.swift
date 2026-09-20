@@ -13,6 +13,17 @@ final class NoteTextView: NSTextView {
 
     private static let minFontSize: CGFloat = 9
     private static let maxFontSize: CGFloat = 48
+    private var currentFontSize: CGFloat = 16
+
+    /// Replacing the whole text (loading a note, external reload) inserts characters
+    /// that do not inherit the view's font, so re-apply it afterwards.
+    override var string: String {
+        get { super.string }
+        set {
+            super.string = newValue
+            applyFontSize(currentFontSize)
+        }
+    }
 
     /// Builds the scroll view + text view pair with the standard wrapping setup.
     static func makeScrollable(fontSize: CGFloat) -> (scrollView: NSScrollView, textView: NoteTextView) {
@@ -110,13 +121,14 @@ final class NoteTextView: NSTextView {
     // MARK: Font size
 
     func applyFontSize(_ size: CGFloat) {
+        currentFontSize = size
         let newFont = NSFont.systemFont(ofSize: size)
         font = newFont // plain-text mode: applies to all text
         typingAttributes[.font] = newFont
     }
 
     private func adjustFontSize(by delta: CGFloat) {
-        let current = font?.pointSize ?? 16
+        let current = currentFontSize
         let size = min(Self.maxFontSize, max(Self.minFontSize, current + delta))
         guard size != current else { return }
         applyFontSize(size)
