@@ -112,12 +112,23 @@ final class NoteLibrary {
     /// Where `url` should live for its file name to match `title`, or nil if it already does.
     func urlMatchingTitle(for url: URL, title: String) -> URL? {
         let desired = Self.sanitizedFilename(title)
-        let current = url.deletingPathExtension().lastPathComponent
+        let current = url.deletingPathExtension().lastPathComponent.precomposedStringWithCanonicalMapping
         if current.caseInsensitiveCompare(desired) == .orderedSame { return nil }
         // "Title 2", "Title 3" … from an earlier name collision also count as matching.
         let pattern = "^" + NSRegularExpression.escapedPattern(for: desired) + " \\d+$"
         if current.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil { return nil }
+        // The file system may already consider the desired name to be this very file
+        // (case- and normalisation-insensitive volume); then there is nothing to do.
+        let candidate = directoryURL.appendingPathComponent(desired).appendingPathExtension("txt")
+        if Self.sameFile(candidate, url) { return nil }
         return uniqueURL(forTitle: title)
+    }
+
+    private static func sameFile(_ a: URL, _ b: URL) -> Bool {
+        guard let ida = try? a.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier,
+              let idb = try? b.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier
+        else { return false }
+        return ida.isEqual(idb)
     }
 
     func uniqueURL(forTitle title: String) -> URL {
@@ -141,15 +152,26 @@ final class NoteLibrary {
         return line.map(MarkdownStyler.plainText) ?? "Untitled"
     }
 
-    /// A readable file name for a title: path separators replaced, whitespace collapsed,
-    /// capped at 60 characters.
+    private static let windowsReservedNames: Set<String> = {
+        var names: Set<String> = ["CON", "PRN", "AUX", "NUL"]
+        for n in 1...9 { names.insert("COM\(n)"); names.insert("LPT\(n)") }
+        return names
+    }()
+
+    /// A readable file name for a title that is safe on macOS *and* on volumes or sync
+    /// services with Windows rules: unsafe characters replaced, control characters
+    /// dropped, whitespace collapsed, no leading dot, no trailing dots/spaces, reserved
+    /// device names escaped, composed Unicode, capped at 60 characters.
     static func sanitizedFilename(_ title: String) -> String {
-        var s = title.replacingOccurrences(of: "[/:\\\\]", with: "-", options: .regularExpression)
+        var s = title.precomposedStringWithCanonicalMapping
+        s = s.replacingOccurrences(of: #"[/\\:*?"<>|]"#, with: "-", options: .regularExpression)
         s = s.components(separatedBy: .controlCharacters).joined()
-        s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.count > 60 { s = String(s.prefix(60)) }
+        s = s.replacingOccurrences(of: #"[. ]+$"#, with: "", options: .regularExpression)
         if s.hasPrefix(".") { s = "_" + s.dropFirst() }
-        if s.count > 60 { s = String(s.prefix(60)).trimmingCharacters(in: .whitespaces) }
+        if windowsReservedNames.contains(s.uppercased()) { s += "_" }
         return s.isEmpty ? "Untitled" : s
     }
 

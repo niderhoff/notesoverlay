@@ -87,5 +87,9 @@ defaults write com.niid.NotesOverlay notesDirectory ~/Documents/Notes
 defaults delete com.niid.NotesOverlay notesDirectory   # back to the default
 ```
 
-Notes are renamed to match their first line when you hide the window or switch notes.
+Notes are renamed to match their first line (Markdown stripped) when you hide the window or
+switch notes. File names are made safe for macOS and Windows-style volumes: `/ \ : * ? " < > |`
+become `-`, control characters are dropped, whitespace is collapsed, leading dots and trailing
+dots/spaces are removed, Windows device names (`CON`, `NUL`, `COM1`…) get a `_`, names are cut at
+60 characters, and an empty result becomes `Untitled`. A clash gets ` 2`, ` 3`, … appended.
 Pinned state and "last opened" times are kept in the app's preferences, keyed by file name.
