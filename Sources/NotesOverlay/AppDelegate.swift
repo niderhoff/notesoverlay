@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
 
     private var toggleItem: NSMenuItem!
     private var folderItem: NSMenuItem!
+    private var accentItems: [NSMenuItem] = []
+    private var translucentItem: NSMenuItem!
     private var launchAtLoginItem: NSMenuItem!
 
     // MARK: Lifecycle
@@ -458,6 +460,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         folderItem.target = self
         menu.addItem(folderItem)
 
+        let appearance = NSMenu(title: "Appearance")
+        appearance.autoenablesItems = false
+        for choice in AccentChoice.allCases {
+            let item = NSMenuItem(title: "Highlight: \(choice.title)", action: #selector(chooseAccent(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = choice.rawValue
+            appearance.addItem(item)
+            accentItems.append(item)
+        }
+        appearance.addItem(.separator())
+        translucentItem = NSMenuItem(title: "Translucent Background", action: #selector(toggleTranslucency), keyEquivalent: "")
+        translucentItem.target = self
+        appearance.addItem(translucentItem)
+        let appearanceItem = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
+        appearanceItem.submenu = appearance
+        menu.addItem(appearanceItem)
+        updateAppearanceItems()
+
         let change = NSMenuItem(title: "Change Hotkey…", action: #selector(changeHotKey), keyEquivalent: "")
         change.target = self
         menu.addItem(change)
@@ -480,7 +500,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     func menuNeedsUpdate(_ menu: NSMenu) {
         updateToggleItem()
         updateLaunchAtLoginItem()
+        updateAppearanceItems()
         folderItem?.toolTip = library.directoryURL.path
+    }
+
+    private func updateAppearanceItems() {
+        for item in accentItems {
+            item.state = (item.representedObject as? String) == Settings.accent.rawValue ? .on : .off
+        }
+        translucentItem?.state = Settings.translucentBackground ? .on : .off
+    }
+
+    @objc private func chooseAccent(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let choice = AccentChoice(rawValue: raw) else { return }
+        Settings.accent = choice
+        panel.textView.applyAccent()
+        updateAppearanceItems()
+    }
+
+    @objc private func toggleTranslucency() {
+        Settings.translucentBackground.toggle()
+        panel.setTranslucent(Settings.translucentBackground)
+        updateAppearanceItems()
     }
 
     private func updateToggleItem() {

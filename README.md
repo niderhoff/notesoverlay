@@ -45,6 +45,12 @@ make install    # build, copy to /Applications, launch
 `make install` is what you want for daily use: "Launch at Login" in the menu is only
 offered when the app runs from `/Applications`.
 
+## Appearance
+
+Menu bar icon → **Appearance**: pick the highlight colour (Red, Blue, or the System Accent) used
+for bullets, checkboxes, list numbers and the cursor, and toggle **Translucent Background**
+(off = solid dark/light background instead of the blurred material).
+
 ## Change the hotkey
 
 Menu bar icon → **Change Hotkey…** → press the new combination. It must include ⌃, ⌥ or ⌘.

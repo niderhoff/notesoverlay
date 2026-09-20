@@ -396,11 +396,15 @@ final class SwitcherCellView: NSTableCellView {
     init() {
         super.init(frame: .zero)
 
+        for label in [titleLabel, subtitleLabel] {
+            label.lineBreakMode = .byTruncatingTail
+            label.maximumNumberOfLines = 1
+            label.cell?.usesSingleLineMode = true
+            label.cell?.truncatesLastVisibleLine = true
+        }
         titleLabel.font = .systemFont(ofSize: 15)
-        titleLabel.lineBreakMode = .byTruncatingTail
         subtitleLabel.font = .systemFont(ofSize: 13)
         subtitleLabel.textColor = .secondaryLabelColor
-        subtitleLabel.lineBreakMode = .byTruncatingTail
 
         for button in [pinButton, trashButton] {
             button.isBordered = false
@@ -469,10 +473,16 @@ final class SwitcherCellView: NSTableCellView {
 
     // MARK: Subtitle
 
-    private static let subtitleAttributes: [NSAttributedString.Key: Any] = [
-        .foregroundColor: NSColor.secondaryLabelColor,
-        .font: NSFont.systemFont(ofSize: 13),
-    ]
+    private static let subtitleAttributes: [NSAttributedString.Key: Any] = {
+        // An attributed value overrides the field's line breaking; keep it on one line.
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        return [
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .font: NSFont.systemFont(ofSize: 13),
+            .paragraphStyle: paragraph,
+        ]
+    }()
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -490,9 +500,10 @@ final class SwitcherCellView: NSTableCellView {
         let result = NSMutableAttributedString()
         if isCurrent {
             result.append(NSAttributedString(string: "● ", attributes: [
-                .foregroundColor: NSColor.systemRed,
+                .foregroundColor: Settings.accent.color,
                 .font: NSFont.systemFont(ofSize: 9),
                 .baselineOffset: 1.5,
+                .paragraphStyle: subtitleAttributes[.paragraphStyle]!,
             ]))
             result.append(NSAttributedString(string: "Current • \(count)", attributes: subtitleAttributes))
         } else if let opened = note.lastOpened {

@@ -29,7 +29,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let x = origin.x + fragment.minX + glyphOrigin.x
             let baseline = origin.y + fragment.minY + glyphOrigin.y
             let box = NSRect(x: x, y: baseline - font.capHeight - (side - font.capHeight) / 2, width: side, height: side)
-            Self.drawCheckbox(in: box, checked: checked, color: .controlAccentColor)
+            Self.drawCheckbox(in: box, checked: checked, color: Settings.accent.color)
         }
     }
 
@@ -127,8 +127,8 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
     /// Markers on the raw (caret) line: readable, but clearly not content.
     private var markerColor: NSColor { .secondaryLabelColor }
     private var bulletFont: NSFont { .boldSystemFont(ofSize: baseFontSize) }
-    /// List markers (bullets, checkboxes, numbers) follow the system accent colour.
-    private var listColor: NSColor { .controlAccentColor }
+    /// List markers (bullets, checkboxes, numbers) use the chosen highlight colour.
+    private var listColor: NSColor { Settings.accent.color }
 
     private func headingFont(level: Int) -> NSFont {
         let scale: CGFloat = [1.5, 1.3, 1.15, 1.0, 1.0, 1.0][min(max(level, 1), 6) - 1]

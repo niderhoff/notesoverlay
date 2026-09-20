@@ -31,6 +31,34 @@ struct HotKeyCombo: Equatable {
     }
 }
 
+/// Highlight colour used for list markers, checkboxes and the text cursor.
+enum AccentChoice: String, CaseIterable {
+    case red, blue, system
+
+    var title: String {
+        switch self {
+        case .red: return "Red"
+        case .blue: return "Blue"
+        case .system: return "System Accent"
+        }
+    }
+
+    /// Coral that reads well on both appearances.
+    private static let coral = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 0.93, green: 0.36, blue: 0.33, alpha: 1)
+            : NSColor(srgbRed: 0.85, green: 0.27, blue: 0.24, alpha: 1)
+    }
+
+    var color: NSColor {
+        switch self {
+        case .red: return Self.coral
+        case .blue: return .systemBlue
+        case .system: return .controlAccentColor
+        }
+    }
+}
+
 /// UserDefaults-backed settings. Domain is the bundle identifier (com.niid.NotesOverlay)
 /// when running from the .app bundle.
 enum Settings {
@@ -42,6 +70,8 @@ enum Settings {
         static let hotKeyLabel = "hotKeyLabel"
         static let hotKeyEquivalent = "hotKeyEquivalent"
         static let fontSize = "fontSize"
+        static let accent = "accentColor"
+        static let translucent = "translucentBackground"
         static let notePath = "notePath" // 1.0: the single note file
         static let notesDirectory = "notesDirectory"
         static let didMigrateLegacyNote = "didMigrateLegacyNote"
@@ -80,6 +110,18 @@ enum Settings {
             return stored > 0 ? CGFloat(stored) : 16
         }
         set { defaults.set(Double(newValue), forKey: Key.fontSize) }
+    }
+
+    // MARK: Appearance
+
+    static var accent: AccentChoice {
+        get { AccentChoice(rawValue: defaults.string(forKey: Key.accent) ?? "") ?? .red }
+        set { defaults.set(newValue.rawValue, forKey: Key.accent) }
+    }
+
+    static var translucentBackground: Bool {
+        get { defaults.object(forKey: Key.translucent) == nil ? true : defaults.bool(forKey: Key.translucent) }
+        set { defaults.set(newValue, forKey: Key.translucent) }
     }
 
     // MARK: Notes location

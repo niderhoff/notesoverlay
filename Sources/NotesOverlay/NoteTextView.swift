@@ -74,7 +74,7 @@ final class NoteTextView: NSTextView {
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.drawsBackground = false
         textView.textColor = .labelColor
-        textView.insertionPointColor = .controlAccentColor
+        textView.insertionPointColor = Settings.accent.color
         // Background only: the default also forces a text colour, which would repaint the
         // transparent (hidden) Markdown markers whenever they are inside a selection.
         textView.selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor]
@@ -218,6 +218,13 @@ final class NoteTextView: NSTextView {
 
     private func updateCursor(at point: NSPoint) {
         (checkboxState(at: point) != nil ? NSCursor.pointingHand : NSCursor.iBeam).set()
+    }
+
+    /// Re-applies the highlight colour after it was changed in the menu.
+    func applyAccent() {
+        insertionPointColor = Settings.accent.color
+        markdown?.restyleAll()
+        needsDisplay = true
     }
 
     // MARK: Font size

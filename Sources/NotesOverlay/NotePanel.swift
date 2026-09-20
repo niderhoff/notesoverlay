@@ -12,6 +12,7 @@ final class NotePanel: NSPanel {
     var onNewNoteButton: (() -> Void)?
     var onSwitcherButton: (() -> Void)?
     private let titlebarButtons = NSTitlebarAccessoryViewController()
+    private let effectView = NSVisualEffectView()
     /// Our own title: regular weight, centred, always visible (the native one is bold and
     /// would be hidden with the rest of the chrome).
     private let titleLabel = PassThroughLabel(labelWithString: "Untitled")
@@ -46,11 +47,22 @@ final class NotePanel: NSPanel {
         standardWindowButton(.miniaturizeButton)?.isHidden = true
         standardWindowButton(.zoomButton)?.isHidden = true
 
-        let background = NSVisualEffectView()
-        background.material = .hudWindow
-        background.blendingMode = .behindWindow
-        background.state = .active // default follows "window active", which we never are
+        // Solid background underneath, blurred material on top (toggled by the
+        // "Translucent Background" setting); everything else sits above both.
+        let background = OpaqueBackgroundView()
         contentView = background
+        effectView.material = .hudWindow
+        effectView.blendingMode = .behindWindow
+        effectView.state = .active // default follows "window active", which we never are
+        effectView.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(effectView)
+        NSLayoutConstraint.activate([
+            effectView.topAnchor.constraint(equalTo: background.topAnchor),
+            effectView.bottomAnchor.constraint(equalTo: background.bottomAnchor),
+            effectView.leadingAnchor.constraint(equalTo: background.leadingAnchor),
+            effectView.trailingAnchor.constraint(equalTo: background.trailingAnchor),
+        ])
+        setTranslucent(Settings.translucentBackground)
 
         background.addSubview(scrollView)
 
@@ -97,6 +109,11 @@ final class NotePanel: NSPanel {
         _ = setFrameAutosaveName(Self.frameAutosaveName) // restores a saved frame immediately
         updateChrome()
         applyChrome()
+    }
+
+    /// Blurred material behind the note, or a solid background.
+    func setTranslucent(_ translucent: Bool) {
+        effectView.isHidden = !translucent
     }
 
     // MARK: Hover chrome
@@ -280,4 +297,19 @@ final class TitlebarButton: NSButton {
 /// A label that never intercepts the mouse, so the title bar stays draggable through it.
 final class PassThroughLabel: NSTextField {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// Solid window background used when translucency is off: near-black in dark mode,
+/// off-white in light mode.
+final class OpaqueBackgroundView: NSView {
+    private static let color = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 0.11, alpha: 1)
+            : NSColor(white: 0.97, alpha: 1)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        Self.color.setFill()
+        dirtyRect.fill()
+    }
 }
