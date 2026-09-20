@@ -163,8 +163,19 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         return tabs + spaces / 2
     }
 
+    /// Body text breathes a little: extra space between lines, and a blank line
+    /// separates blocks by a full extra font size.
+    private var lineSpacing: CGFloat { (baseFontSize * 0.3).rounded() }
+    private var blankLineSpacing: CGFloat { baseFontSize.rounded() }
+
+    private func baseParagraphStyle() -> NSMutableParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = lineSpacing
+        return style
+    }
+
     private func baseAttributes() -> [NSAttributedString.Key: Any] {
-        [.font: baseFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: NSParagraphStyle.default]
+        [.font: baseFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: baseParagraphStyle()]
     }
 
     // MARK: Restyle
@@ -250,7 +261,8 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
         let offset = content.location
         var contentStart = 0
         var contentFont = baseFont
-        let paragraphStyle = NSMutableParagraphStyle()
+        let paragraphStyle = baseParagraphStyle()
+        if content.length == 0 { paragraphStyle.paragraphSpacing = blankLineSpacing }
 
         func absolute(_ r: NSRange) -> NSRange { NSRange(location: r.location + offset, length: r.length) }
         func marker(_ r: NSRange, font: NSFont? = nil) {
