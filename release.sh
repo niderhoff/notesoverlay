@@ -59,7 +59,9 @@ cask "notesoverlay" do
   zap trash: "~/Library/Preferences/com.niid.NotesOverlay.plist"
 end
 CASKEOF
-(cd "$TAP_DIR" && git add Casks/notesoverlay.rb && git commit -q -m "notesoverlay $VERSION" && git push)
+# The tap remote is HTTPS; authenticate the push with gh's token so it works unattended.
+(cd "$TAP_DIR" && git add Casks/notesoverlay.rb && git commit -q -m "notesoverlay $VERSION" \
+  && git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push)
 
 echo "Released NotesOverlay $VERSION."
 echo "Install / upgrade anywhere:  brew install --cask niderhoff/personal/notesoverlay   |   brew upgrade --cask notesoverlay"
