@@ -8,6 +8,14 @@ Menu-bar-only macOS app, pure Swift + AppKit, no dependencies, no Xcode project.
 - Notes are **plain `.txt` files in `~/Notes/NotesOverlay/`**, one per note, named after the note's first line. They autosave while you type and reload when another program changes the file.
 - The title bar is empty until you move the mouse over the window; then it shows the close button, the note's first line, and buttons for **New Note** and **Switch Note**. **⌘+ / ⌘−** change the font size.
 
+## Markdown
+
+Notes are Markdown, rendered live: headings, **bold**, *italic*, ~~strike~~, `code`, fenced
+code blocks, `- ` bullets (drawn as •), `- [ ]` / `- [x]` tasks (☐ / ☑), `> ` quotes and
+`[links](url)`. The line(s) your cursor is on show the raw source with the markers dimmed,
+so you always see what you are editing. The file on disk, and anything you copy or paste,
+is plain Markdown text; rendering never changes a character.
+
 ## Switching notes (⌘P)
 
 Inside the note window, **⌘P** opens the note switcher:

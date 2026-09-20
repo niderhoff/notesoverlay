@@ -14,6 +14,8 @@ final class NoteTextView: NSTextView {
     private static let minFontSize: CGFloat = 9
     private static let maxFontSize: CGFloat = 48
     private var currentFontSize: CGFloat = 16
+    /// Live Markdown rendering (attributes only; the text stays raw Markdown).
+    private(set) var markdown: MarkdownStyler?
 
     /// Replacing the whole text (loading a note, external reload) inserts characters
     /// that do not inherit the view's font, so re-apply it afterwards.
@@ -40,7 +42,9 @@ final class NoteTextView: NSTextView {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         let contentSize = scrollView.contentSize
-        let textView = NoteTextView(frame: NSRect(origin: .zero, size: contentSize))
+        // TextKit 1: the Markdown styler hides syntax through NSLayoutManager glyph generation.
+        let textView = NoteTextView(usingTextLayoutManager: false)
+        textView.frame = NSRect(origin: .zero, size: contentSize)
         textView.minSize = NSSize(width: 0, height: contentSize.height)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
@@ -71,6 +75,10 @@ final class NoteTextView: NSTextView {
         textView.textColor = .labelColor
         textView.insertionPointColor = .labelColor
         textView.applyFontSize(fontSize)
+
+        let styler = MarkdownStyler(textView: textView, fontSize: fontSize)
+        styler.attach()
+        textView.markdown = styler
 
         scrollView.documentView = textView
         return (scrollView, textView)
@@ -125,6 +133,16 @@ final class NoteTextView: NSTextView {
         let newFont = NSFont.systemFont(ofSize: size)
         font = newFont // plain-text mode: applies to all text
         typingAttributes[.font] = newFont
+        if let markdown {
+            markdown.baseFontSize = size
+            markdown.restyleAll()
+        }
+    }
+
+    /// The raw/rendered split follows the selection.
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        if !stillSelecting { markdown?.selectionDidChange() }
     }
 
     private func adjustFontSize(by delta: CGFloat) {
