@@ -7,7 +7,6 @@ final class NotePanel: NSPanel {
 
     let textView: NoteTextView
     private let scrollView: NSScrollView
-    private let footerLabel = NSTextField(labelWithString: "")
 
     /// Title-bar buttons (mouse controls, shown only while hovering).
     var onNewNoteButton: (() -> Void)?
@@ -49,14 +48,7 @@ final class NotePanel: NSPanel {
         background.state = .active // default follows "window active", which we never are
         contentView = background
 
-        footerLabel.font = .systemFont(ofSize: 11)
-        footerLabel.textColor = .secondaryLabelColor
-        footerLabel.alignment = .center
-        footerLabel.lineBreakMode = .byTruncatingTail
-        footerLabel.translatesAutoresizingMaskIntoConstraints = false
-
         background.addSubview(scrollView)
-        background.addSubview(footerLabel)
 
         // contentLayoutGuide excludes the (transparent) title bar.
         let guide = contentLayoutGuide as! NSLayoutGuide
@@ -64,10 +56,7 @@ final class NotePanel: NSPanel {
             scrollView.topAnchor.constraint(equalTo: guide.topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: background.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: background.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: footerLabel.topAnchor, constant: -4),
-            footerLabel.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 12),
-            footerLabel.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -12),
-            footerLabel.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -8),
+            scrollView.bottomAnchor.constraint(equalTo: background.bottomAnchor),
         ])
 
         installTitlebarButtons()
@@ -205,15 +194,11 @@ final class NotePanel: NSPanel {
         setChrome(visible: false)
     }
 
-    /// Title = first non-empty line, footer = character count.
+    /// Title = first non-empty line of the note.
     func updateChrome() {
-        let text = textView.string
-        let full = NoteLibrary.title(of: text)
+        let full = NoteLibrary.title(of: textView.string)
         noteTitle = full.count > 40 ? String(full.prefix(40)) + "…" : full
         if isChromeVisible { title = noteTitle }
-
-        let count = text.count
-        footerLabel.stringValue = count == 1 ? "1 character" : "\(count) characters"
     }
 }
 

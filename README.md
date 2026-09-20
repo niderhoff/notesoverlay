@@ -6,7 +6,7 @@ Menu-bar-only macOS app, pure Swift + AppKit, no dependencies, no Xcode project.
 - **Hotkey** (default ⌃⌥Space) toggles the note window. Visible but unfocused → focuses it. Focused → hides it.
 - **Esc**, **⌘W**, or the red close button hide it. It stays on top of everything, including full-screen apps, and follows you across Spaces.
 - Notes are **plain `.txt` files in `~/Notes/NotesOverlay/`**, one per note, named after the note's first line. They autosave while you type and reload when another program changes the file.
-- The title bar is empty until you move the mouse over the window; then it shows the close button, the note's first line, and buttons for **New Note** and **Switch Note**. The footer shows the character count. **⌘+ / ⌘−** change the font size.
+- The title bar is empty until you move the mouse over the window; then it shows the close button, the note's first line, and buttons for **New Note** and **Switch Note**. **⌘+ / ⌘−** change the font size.
 
 ## Switching notes (⌘P)
 
