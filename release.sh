@@ -45,13 +45,13 @@ cask "notesoverlay" do
   desc "Floating Markdown scratchpad with a global hotkey"
   homepage "https://github.com/$REPO"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "NotesOverlay.app"
 
   # Ad-hoc signed (no Developer ID): drop the quarantine flag so Gatekeeper lets it run.
-  postflight do
-    system_command "/usr/bin/xattr", args: ["-cr", "#{appdir}/NotesOverlay.app"]
+  postflight_steps do
+    run "/usr/bin/xattr", args: ["-cr", "{{appdir}}/NotesOverlay.app"]
   end
 
   uninstall quit: "com.niid.NotesOverlay"
