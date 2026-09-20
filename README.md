@@ -33,6 +33,22 @@ Inside the note window, **⌘P** opens the note switcher:
 
 Rows show the title plus "Current", or when the note was last opened, and its character count.
 
+## Install with Homebrew
+
+```sh
+brew install --cask niderhoff/personal/notesoverlay
+```
+
+Installs `NotesOverlay.app` into /Applications from the latest GitHub release. The app is
+ad-hoc signed (no Apple Developer ID), so the cask clears the quarantine flag after
+installing. Upgrade with `brew upgrade --cask notesoverlay`.
+
+To publish a new version (needs `gh` logged in and the tap cloned via `brew tap niderhoff/personal`):
+
+```sh
+make release VERSION=1.2.0
+```
+
 ## Build & run
 
 Requires the Xcode Command Line Tools (`xcode-select --install`), macOS 14+.

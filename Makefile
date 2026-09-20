@@ -1,6 +1,6 @@
 APP := build/NotesOverlay.app
 
-.PHONY: build run install clean
+.PHONY: build run install clean release
 
 build:
 	./build.sh
@@ -19,3 +19,6 @@ install: build
 
 clean:
 	rm -rf .build build
+
+release:
+	./release.sh $(VERSION)
