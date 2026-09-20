@@ -179,13 +179,45 @@ final class NoteTextView: NSTextView {
         didChangeText()
     }
 
+    // Cursor: set explicitly on every mouse move instead of via cursor rects, which
+    // overlap NSTextView's own I-beam rect and are not refreshed reliably in a window
+    // whose app is never active.
+    private var cursorTracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let cursorTracking { removeTrackingArea(cursorTracking) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        cursorTracking = area
+    }
+
     override func resetCursorRects() {
-        super.resetCursorRects()
-        guard let storage = textStorage, storage.length > 0 else { return }
-        storage.enumerateAttribute(.markdownCheckbox, in: NSRange(location: 0, length: storage.length), options: []) { value, range, _ in
-            guard value != nil, let rect = checkboxRect(forBracketAt: range.location) else { return }
-            addCursorRect(rect, cursor: .pointingHand)
-        }
+        // Intentionally empty: see updateTrackingAreas.
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        NSCursor.arrow.set()
+    }
+
+    private func updateCursor(at point: NSPoint) {
+        (checkboxState(at: point) != nil ? NSCursor.pointingHand : NSCursor.iBeam).set()
     }
 
     // MARK: Font size
