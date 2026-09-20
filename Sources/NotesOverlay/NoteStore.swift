@@ -13,8 +13,11 @@ final class NoteStore {
 
     private var pendingText: String?
     private var saveTimer: Timer?
-    private var watchSource: DispatchSourceFileSystemObject?
-    private var reloadWorkItem: DispatchWorkItem?
+
+    private var directorySource: DispatchSourceFileSystemObject?
+    private var fileSource: DispatchSourceFileSystemObject?
+    private var watchedInode: ino_t = 0
+    private var syncWorkItem: DispatchWorkItem?
 
     init(path: String) {
         fileURL = URL(fileURLWithPath: path)
@@ -52,7 +55,7 @@ final class NoteStore {
         let fileExists = FileManager.default.fileExists(atPath: fileURL.path)
         guard text != lastKnownText || !fileExists else { return }
 
-        // Set before writing so the directory watcher recognises the write as ours.
+        // Set before writing so the watchers recognise the write as ours.
         lastKnownText = text
         do {
             try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
@@ -64,36 +67,64 @@ final class NoteStore {
 
     // MARK: External changes
 
-    /// Watches the *directory*, not the file: atomic saves (ours and other editors')
-    /// replace the inode, which would invalidate a file descriptor on the file itself.
+    /// Two watchers. The directory catches atomic saves (a new inode renamed over the
+    /// file, which is what editors and our own `.atomic` writes do). The file itself
+    /// catches in-place writes such as `echo >> scratchpad.txt`. After any event the
+    /// file watcher is re-armed if the inode changed, then the contents are compared.
     func startWatching() {
         stopWatching()
-        let fd = open(directoryURL.path, O_EVTONLY)
-        guard fd >= 0 else {
+        directorySource = makeSource(path: directoryURL.path, mask: .write)
+        if directorySource == nil {
             NSLog("NotesOverlay: cannot watch \(directoryURL.path)")
-            return
         }
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: .write,
-            queue: .main
-        )
-        source.setEventHandler { [weak self] in self?.directoryChanged() }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        watchSource = source
+        armFileWatcher()
     }
 
     func stopWatching() {
-        watchSource?.cancel()
-        watchSource = nil
+        directorySource?.cancel()
+        directorySource = nil
+        fileSource?.cancel()
+        fileSource = nil
+        watchedInode = 0
     }
 
-    private func directoryChanged() {
-        reloadWorkItem?.cancel()
-        let item = DispatchWorkItem { [weak self] in self?.reloadIfChanged() }
-        reloadWorkItem = item
+    private func makeSource(path: String, mask: DispatchSource.FileSystemEvent) -> DispatchSourceFileSystemObject? {
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else { return nil }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: mask, queue: .main)
+        source.setEventHandler { [weak self] in self?.scheduleSync() }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        return source
+    }
+
+    private func armFileWatcher() {
+        fileSource?.cancel()
+        fileSource = makeSource(
+            path: fileURL.path,
+            mask: [.write, .extend, .attrib, .delete, .rename, .revoke]
+        )
+        watchedInode = fileSource == nil ? 0 : (currentInode() ?? 0)
+    }
+
+    private func currentInode() -> ino_t? {
+        var info = stat()
+        guard stat(fileURL.path, &info) == 0 else { return nil }
+        return info.st_ino
+    }
+
+    private func scheduleSync() {
+        syncWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.sync() }
+        syncWorkItem = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: item)
+    }
+
+    private func sync() {
+        if currentInode() != watchedInode {
+            armFileWatcher() // file was replaced, recreated, or deleted
+        }
+        reloadIfChanged()
     }
 
     private func reloadIfChanged() {
@@ -104,6 +135,7 @@ final class NoteStore {
               text != lastKnownText
         else { return }
         lastKnownText = text
+        NSLog("NotesOverlay: reloaded note after external change (\(text.count) characters)")
         onExternalChange?(text)
     }
 }
