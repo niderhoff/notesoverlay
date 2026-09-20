@@ -38,21 +38,14 @@ final class MarkdownLayoutManager: NSLayoutManager {
         let outline = NSBezierPath(roundedRect: box.insetBy(dx: stroke / 2, dy: stroke / 2),
                                    xRadius: box.width * 0.28, yRadius: box.width * 0.28)
         outline.lineWidth = stroke
+        color.setStroke()
+        outline.stroke()
         if checked {
+            // Same outline, plus a smaller filled rounded square inside.
+            let inset = box.width * 0.3
+            let inner = box.insetBy(dx: inset, dy: inset)
             color.setFill()
-            outline.fill()
-            let check = NSBezierPath()
-            check.lineWidth = stroke
-            check.lineCapStyle = .round
-            check.lineJoinStyle = .round
-            check.move(to: NSPoint(x: box.minX + box.width * 0.26, y: box.minY + box.height * 0.52))
-            check.line(to: NSPoint(x: box.minX + box.width * 0.44, y: box.minY + box.height * 0.70))
-            check.line(to: NSPoint(x: box.minX + box.width * 0.76, y: box.minY + box.height * 0.32))
-            NSColor.white.setStroke()
-            check.stroke()
-        } else {
-            color.setStroke()
-            outline.stroke()
+            NSBezierPath(roundedRect: inner, xRadius: inner.width * 0.25, yRadius: inner.width * 0.25).fill()
         }
     }
 
