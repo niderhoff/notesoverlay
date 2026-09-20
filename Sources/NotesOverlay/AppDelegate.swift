@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     private let recorder = HotKeyRecorder()
 
     private var toggleItem: NSMenuItem!
+    private var folderItem: NSMenuItem!
     private var launchAtLoginItem: NSMenuItem!
 
     // MARK: Lifecycle
@@ -187,6 +188,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         store?.scheduleSave(panel.textView.string)
     }
 
+    // MARK: Notes folder
+
+    @objc private func chooseNotesFolder() {
+        let picker = NSOpenPanel()
+        picker.canChooseDirectories = true
+        picker.canChooseFiles = false
+        picker.canCreateDirectories = true
+        picker.allowsMultipleSelection = false
+        picker.directoryURL = library.directoryURL
+        picker.prompt = "Choose"
+        picker.message = "Choose the folder for your notes. Each note is one .txt file directly in this folder."
+        picker.level = .modalPanel // above the floating note window
+        NSApp.activate()
+        guard picker.runModal() == .OK, let url = picker.url else { return }
+        switchNotesFolder(to: url)
+    }
+
+    private func switchNotesFolder(to newURL: URL) {
+        let current = library.directoryURL.standardizedFileURL
+        let target = newURL.standardizedFileURL
+        guard target != current else { return }
+
+        let existing = library.notes()
+        var moveNotes = false
+        if !existing.isEmpty {
+            let alert = NSAlert()
+            let count = existing.count == 1 ? "your note" : "your \(existing.count) notes"
+            alert.messageText = "Move \(count) to the new folder?"
+            alert.informativeText = "From: \(current.path)\nTo: \(target.path)\n\nNotes already in the new folder are kept. “Just Switch” leaves the current notes where they are."
+            alert.addButton(withTitle: "Move Notes")
+            alert.addButton(withTitle: "Just Switch")
+            alert.addButton(withTitle: "Cancel")
+            alert.window.level = .modalPanel
+            NSApp.activate()
+            switch alert.runModal() {
+            case .alertFirstButtonReturn: moveNotes = true
+            case .alertSecondButtonReturn: moveNotes = false
+            default: return
+            }
+        }
+
+        // Leave the current note cleanly, then swap libraries.
+        panel.dismissSwitcher()
+        if !discardCurrentNoteIfEmpty() { commitCurrentNote() }
+        store?.discard()
+        store = nil
+        library.stopWatching()
+
+        do {
+            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+            if moveNotes { try moveAllNotes(from: library, to: target) }
+        } catch {
+            presentError("Could not switch the notes folder to \(target.path).", error)
+            library.startWatching()
+            openInitialNote()
+            return
+        }
+
+        Settings.notesDirectory = target
+        library = NoteLibrary(directoryURL: target)
+        library.onChange = { [weak self] in self?.refreshSwitcher() }
+        library.startWatching()
+        openInitialNote()
+        showPanel()
+    }
+
+    /// Moves every note file; a name clash in the target gets a " 2" suffix and the
+    /// note's pinned/last-opened metadata follows the new name.
+    private func moveAllNotes(from source: NoteLibrary, to target: URL) throws {
+        let destination = NoteLibrary(directoryURL: target)
+        for note in source.notes() {
+            let dest = destination.uniqueURL(forTitle: note.url.deletingPathExtension().lastPathComponent)
+            try FileManager.default.moveItem(at: note.url, to: dest)
+            if dest.lastPathComponent != note.filename {
+                Settings.renameMetadata(from: note.filename, to: dest.lastPathComponent)
+            }
+        }
+    }
+
     // MARK: Switcher
 
     private func toggleSwitcher() {
@@ -361,6 +441,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
 
         menu.addItem(.separator())
 
+        folderItem = NSMenuItem(title: "Choose Notes Folder…", action: #selector(chooseNotesFolder), keyEquivalent: "")
+        folderItem.target = self
+        menu.addItem(folderItem)
+
         let change = NSMenuItem(title: "Change Hotkey…", action: #selector(changeHotKey), keyEquivalent: "")
         change.target = self
         menu.addItem(change)
@@ -383,6 +467,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     func menuNeedsUpdate(_ menu: NSMenu) {
         updateToggleItem()
         updateLaunchAtLoginItem()
+        folderItem?.toolTip = library.directoryURL.path
     }
 
     private func updateToggleItem() {

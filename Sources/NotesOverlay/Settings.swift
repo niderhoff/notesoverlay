@@ -84,14 +84,17 @@ enum Settings {
 
     // MARK: Notes location
 
-    /// Folder holding one .txt file per note. Override with:
-    ///   defaults write com.niid.NotesOverlay notesDirectory ~/somewhere
+    /// Folder holding one .txt file per note. Set from the menu ("Choose Notes Folder…")
+    /// or with:  defaults write com.niid.NotesOverlay notesDirectory ~/somewhere
     static var notesDirectory: URL {
-        if let custom = defaults.string(forKey: Key.notesDirectory), !custom.isEmpty {
-            return URL(fileURLWithPath: (custom as NSString).expandingTildeInPath, isDirectory: true)
+        get {
+            if let custom = defaults.string(forKey: Key.notesDirectory), !custom.isEmpty {
+                return URL(fileURLWithPath: (custom as NSString).expandingTildeInPath, isDirectory: true)
+            }
+            return URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+                .appendingPathComponent("Notes/NotesOverlay", isDirectory: true)
         }
-        return URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
-            .appendingPathComponent("Notes/NotesOverlay", isDirectory: true)
+        set { defaults.set(newValue.standardizedFileURL.path, forKey: Key.notesDirectory) }
     }
 
     /// Where 1.0 kept its single note. Moved into `notesDirectory` on first launch.

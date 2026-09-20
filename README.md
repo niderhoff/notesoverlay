@@ -44,15 +44,16 @@ NotesOverlay tells you and lets you pick another.
 
 ## Change where notes are stored
 
+Menu bar icon → **Choose Notes Folder…** opens the folder picker (its "New Folder" button
+creates one on the spot). Pick a folder and choose whether to move your existing notes
+there or just switch. Notes are always stored flat: one `.txt` per note, directly in that
+folder. Hover the menu item to see the current folder. Default: `~/Notes/NotesOverlay/`.
+
+The same setting from the command line (restart the app afterwards):
+
 ```sh
 defaults write com.niid.NotesOverlay notesDirectory ~/Documents/Notes
-```
-
-Restart the app afterwards; move the existing `.txt` files yourself. Delete the key to go
-back to `~/Notes/NotesOverlay/`:
-
-```sh
-defaults delete com.niid.NotesOverlay notesDirectory
+defaults delete com.niid.NotesOverlay notesDirectory   # back to the default
 ```
 
 Notes are renamed to match their first line when you hide the window or switch notes.
