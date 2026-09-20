@@ -138,20 +138,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         panel.textView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Deletes the current note when it is empty, unpinned, and not the only note, so
+    /// Discards the current note when it is empty, unpinned, and not the only note, so
     /// switching around never leaves "Untitled" files behind. Returns true if removed;
     /// the editor then has no note until `open` is called.
+    ///
+    /// Safety: the editor *and* the file on disk must both be empty. If they disagree,
+    /// something went wrong in between and the file is left alone. The file goes to the
+    /// Trash, never straight to deletion.
     @discardableResult
     private func discardCurrentNoteIfEmpty() -> Bool {
         guard let store, currentTextIsEmpty,
               !Settings.pinnedNotes.contains(store.fileURL.lastPathComponent),
               library.notes().contains(where: { $0.url != store.fileURL })
         else { return false }
+        let onDisk = (try? String(contentsOf: store.fileURL, encoding: .utf8)) ?? ""
+        guard onDisk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            NSLog("NotesOverlay: editor empty but \(store.fileURL.lastPathComponent) has \(onDisk.count) characters on disk; keeping it")
+            return false
+        }
         store.discard()
         do {
-            try FileManager.default.removeItem(at: store.fileURL)
+            if FileManager.default.fileExists(atPath: store.fileURL.path) {
+                try FileManager.default.trashItem(at: store.fileURL, resultingItemURL: nil)
+            }
+            NSLog("NotesOverlay: discarded empty note \(store.fileURL.lastPathComponent)")
         } catch {
-            NSLog("NotesOverlay: could not remove empty note \(store.fileURL.lastPathComponent): \(error)")
+            NSLog("NotesOverlay: could not trash empty note \(store.fileURL.lastPathComponent): \(error)")
         }
         Settings.removeMetadata(for: store.fileURL.lastPathComponent)
         self.store = nil
@@ -168,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         do {
             try store.moveFile(to: target)
             Settings.renameMetadata(from: old, to: target.lastPathComponent)
+            NSLog("NotesOverlay: renamed \(old) → \(target.lastPathComponent)")
         } catch {
             NSLog("NotesOverlay: could not rename \(old) to \(target.lastPathComponent): \(error)")
         }
