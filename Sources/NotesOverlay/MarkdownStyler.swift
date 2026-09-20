@@ -5,6 +5,30 @@ extension NSAttributedString.Key {
     static let markdownHidden = NSAttributedString.Key("NotesOverlay.markdownHidden")
     /// A one-character String to draw instead of the character (e.g. "•" for "-").
     static let markdownGlyph = NSAttributedString.Key("NotesOverlay.markdownGlyph")
+    /// Paragraph belongs to a fenced code block: MarkdownLayoutManager draws a full-width band.
+    static let markdownCodeBlock = NSAttributedString.Key("NotesOverlay.markdownCodeBlock")
+}
+
+/// Draws a full-width background band behind fenced code blocks.
+final class MarkdownLayoutManager: NSLayoutManager {
+    override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        if let storage = textStorage, let container = textContainers.first {
+            NSColor.labelColor.withAlphaComponent(0.07).setFill()
+            var glyphIndex = glyphsToShow.location
+            while glyphIndex < NSMaxRange(glyphsToShow) {
+                var fragmentRange = NSRange()
+                let fragment = lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: &fragmentRange)
+                let charIndex = characterIndexForGlyph(at: glyphIndex)
+                if charIndex < storage.length,
+                   storage.attribute(.markdownCodeBlock, at: charIndex, effectiveRange: nil) != nil {
+                    NSRect(x: origin.x, y: fragment.minY + origin.y, width: container.size.width, height: fragment.height).fill()
+                }
+                if fragmentRange.length == 0 { break }
+                glyphIndex = NSMaxRange(fragmentRange)
+            }
+        }
+        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+    }
 }
 
 /// Live Markdown rendering that never touches the characters: the text storage stays
@@ -62,7 +86,9 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
     private var baseFont: NSFont { .systemFont(ofSize: baseFontSize) }
     private var codeFont: NSFont { .monospacedSystemFont(ofSize: baseFontSize * 0.9, weight: .regular) }
     private var codeBackground: NSColor { .labelColor.withAlphaComponent(0.08) }
-    private var markerColor: NSColor { .tertiaryLabelColor }
+    /// Markers on the raw (caret) line: readable, but clearly not content.
+    private var markerColor: NSColor { .secondaryLabelColor }
+    private var bulletFont: NSFont { .boldSystemFont(ofSize: baseFontSize) }
 
     private func headingFont(level: Int) -> NSFont {
         let scale: CGFloat = [1.5, 1.3, 1.15, 1.0, 1.0, 1.0][min(max(level, 1), 6) - 1]
@@ -130,7 +156,8 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
 
     // MARK: Block level
 
-    private static let fence = try! NSRegularExpression(pattern: #"^\s*(```|~~~)"#)
+    /// A line that is only a fence (2+ backticks or 3+ tildes) plus an optional language.
+    private static let fence = try! NSRegularExpression(pattern: #"^[ \t]*(`{2,}|~{3,})[ \t]*([A-Za-z0-9_+#.-]*)[ \t]*$"#)
     private static let heading = try! NSRegularExpression(pattern: #"^(#{1,6})[ \t]+"#)
     private static let task = try! NSRegularExpression(pattern: #"^([ \t]*)([-*+])[ \t](\[)([ xX])(\])[ \t]+"#)
     private static let bullet = try! NSRegularExpression(pattern: #"^([ \t]*)([-*+])[ \t]+"#)
@@ -158,13 +185,14 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             (s as NSString).size(withAttributes: [.font: font]).width
         }
 
-        if Self.fence.firstMatch(in: line, range: lineRange) != nil {
+        if let m = Self.fence.firstMatch(in: line, range: lineRange) {
             inCodeBlock.toggle()
-            storage.addAttributes([.font: codeFont, .foregroundColor: markerColor], range: absolute(lineRange))
+            storage.addAttributes([.font: codeFont, .foregroundColor: markerColor, .markdownCodeBlock: true], range: paragraph)
+            marker(m.range(at: 1), font: codeFont) // rendered: only the language label stays
             return
         }
         if inCodeBlock {
-            storage.addAttributes([.font: codeFont, .backgroundColor: codeBackground], range: absolute(lineRange))
+            storage.addAttributes([.font: codeFont, .markdownCodeBlock: true], range: paragraph)
             return
         }
 
@@ -198,9 +226,9 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             if active {
                 marker(m.range(at: 2))
             } else {
-                storage.addAttribute(.markdownGlyph, value: "•", range: absolute(m.range(at: 2)))
+                storage.addAttributes([.markdownGlyph: "•", .font: bulletFont], range: absolute(m.range(at: 2)))
             }
-            paragraphStyle.headIndent = width(String(indent), baseFont) + width("• ", baseFont)
+            paragraphStyle.headIndent = width(String(indent), baseFont) + width("• ", bulletFont)
             contentStart = m.range.length
         } else if let m = Self.ordered.firstMatch(in: line, range: lineRange) {
             storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: absolute(m.range(at: 2)))
@@ -293,6 +321,26 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             marker(NSRange(location: m.range.location, length: 2))
             marker(NSRange(location: NSMaxRange(m.range) - 2, length: 2))
         }
+    }
+
+    // MARK: Plain text
+
+    private static let titleBlockMarkers = try! NSRegularExpression(
+        pattern: #"^(#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+(\[[ xX]\][ \t]+)?|\d{1,3}[.)][ \t]+)"#)
+    private static let titleLinks = try! NSRegularExpression(pattern: #"!?\[([^\]]+)\]\([^)]*\)"#)
+    private static let titleInlineMarkers = try! NSRegularExpression(pattern: #"(\*{1,3}|_{2,3}|~~|`+)"#)
+
+    /// `line` without its Markdown syntax, for titles and file names ("# Foo" → "Foo").
+    static func plainText(_ line: String) -> String {
+        var s = line.trimmingCharacters(in: .whitespaces)
+        func strip(_ regex: NSRegularExpression, with template: String) {
+            s = regex.stringByReplacingMatches(in: s, range: NSRange(location: 0, length: (s as NSString).length), withTemplate: template)
+        }
+        strip(titleBlockMarkers, with: "")
+        strip(titleLinks, with: "$1")
+        strip(titleInlineMarkers, with: "")
+        s = s.trimmingCharacters(in: .whitespaces)
+        return s.isEmpty ? line.trimmingCharacters(in: .whitespaces) : s
     }
 
     // MARK: Glyph generation (TextKit 1)

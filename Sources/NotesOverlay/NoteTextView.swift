@@ -44,6 +44,7 @@ final class NoteTextView: NSTextView {
         let contentSize = scrollView.contentSize
         // TextKit 1: the Markdown styler hides syntax through NSLayoutManager glyph generation.
         let textView = NoteTextView(usingTextLayoutManager: false)
+        textView.textContainer?.replaceLayoutManager(MarkdownLayoutManager())
         textView.frame = NSRect(origin: .zero, size: contentSize)
         textView.minSize = NSSize(width: 0, height: contentSize.height)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)

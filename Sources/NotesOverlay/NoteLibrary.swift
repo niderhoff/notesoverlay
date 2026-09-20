@@ -131,14 +131,14 @@ final class NoteLibrary {
         return candidate
     }
 
-    /// First non-empty line, trimmed; "Untitled" for an empty note.
+    /// First non-empty line without its Markdown syntax; "Untitled" for an empty note.
     static func title(of content: String) -> String {
         let line = content
             .split(whereSeparator: \.isNewline)
             .lazy
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .first { !$0.isEmpty }
-        return line ?? "Untitled"
+        return line.map(MarkdownStyler.plainText) ?? "Untitled"
     }
 
     /// A readable file name for a title: path separators replaced, whitespace collapsed,
