@@ -130,6 +130,64 @@ final class NoteTextView: NSTextView {
         performFindPanelAction(sender)
     }
 
+    // MARK: Task checkboxes (click to toggle)
+
+    /// The checkbox cell drawn over the "[" at `index`, in view coordinates.
+    private func checkboxRect(forBracketAt index: Int) -> NSRect? {
+        guard let layoutManager, let textContainer else { return nil }
+        let glyph = layoutManager.glyphIndexForCharacter(at: index)
+        guard glyph < layoutManager.numberOfGlyphs else { return nil }
+        var rect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: textContainer)
+        rect.origin.x += textContainerOrigin.x
+        rect.origin.y += textContainerOrigin.y
+        rect.size.width = max(rect.width, MarkdownStyler.checkboxSide(for: currentFontSize))
+        return rect
+    }
+
+    /// Range of the state character (" " or "x") of the checkbox under `point`, if any.
+    private func checkboxState(at point: NSPoint) -> NSRange? {
+        guard let layoutManager, let textContainer, let storage = textStorage, storage.length > 0 else { return nil }
+        let local = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+        let glyph = layoutManager.glyphIndex(for: local, in: textContainer)
+        let index = layoutManager.characterIndexForGlyph(at: glyph)
+        // The click may map to the "[" or to one of the zero-width " ]" right after it.
+        for candidate in [index, index - 1, index - 2] where candidate >= 0 && candidate + 2 < storage.length {
+            guard storage.attribute(.markdownCheckbox, at: candidate, effectiveRange: nil) != nil,
+                  let rect = checkboxRect(forBracketAt: candidate),
+                  rect.insetBy(dx: -3, dy: -3).contains(point)
+            else { continue }
+            return NSRange(location: candidate + 1, length: 1)
+        }
+        return nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let state = checkboxState(at: point) {
+            toggleCheckbox(stateRange: state)
+            return // caret stays where it is, so the line keeps rendering
+        }
+        super.mouseDown(with: event)
+    }
+
+    private func toggleCheckbox(stateRange: NSRange) {
+        guard let storage = textStorage else { return }
+        let current = storage.attributedSubstring(from: stateRange).string
+        let replacement = current == " " ? "x" : " "
+        guard shouldChangeText(in: stateRange, replacementString: replacement) else { return }
+        storage.replaceCharacters(in: stateRange, with: replacement)
+        didChangeText()
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard let storage = textStorage, storage.length > 0 else { return }
+        storage.enumerateAttribute(.markdownCheckbox, in: NSRange(location: 0, length: storage.length), options: []) { value, range, _ in
+            guard value != nil, let rect = checkboxRect(forBracketAt: range.location) else { return }
+            addCursorRect(rect, cursor: .pointingHand)
+        }
+    }
+
     // MARK: Font size
 
     func applyFontSize(_ size: CGFloat) {

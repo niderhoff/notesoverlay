@@ -189,6 +189,7 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             layoutManager.invalidateGlyphs(forCharacterRange: full, changeInLength: 0, actualCharacterRange: nil)
             layoutManager.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
         }
+        textView.window?.invalidateCursorRects(for: textView) // checkbox hand cursors moved
     }
 
     private static func isNewline(_ c: unichar) -> Bool {
