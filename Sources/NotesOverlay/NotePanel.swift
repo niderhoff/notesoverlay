@@ -12,6 +12,9 @@ final class NotePanel: NSPanel {
     var onNewNoteButton: (() -> Void)?
     var onSwitcherButton: (() -> Void)?
     private let titlebarButtons = NSTitlebarAccessoryViewController()
+    /// Our own title: regular weight, centred, always visible (the native one is bold and
+    /// would be hidden with the rest of the chrome).
+    private let titleLabel = PassThroughLabel(labelWithString: "Untitled")
     private var noteTitle = "Untitled"
     private(set) var isChromeVisible = false
     private var hoverTimer: Timer?
@@ -35,6 +38,7 @@ final class NotePanel: NSPanel {
         isReleasedWhenClosed = false
         becomesKeyOnlyIfNeeded = false
         titlebarAppearsTransparent = true
+        titleVisibility = .hidden // replaced by titleLabel below
         isMovableByWindowBackground = true
         animationBehavior = .none // no fade/scale on show or hide
         minSize = NSSize(width: 320, height: 240)
@@ -50,6 +54,14 @@ final class NotePanel: NSPanel {
 
         background.addSubview(scrollView)
 
+        titleLabel.font = .systemFont(ofSize: 13, weight: .regular)
+        titleLabel.textColor = .secondaryLabelColor
+        titleLabel.alignment = .center
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(titleLabel)
+
         // contentLayoutGuide excludes the (transparent) title bar.
         let guide = contentLayoutGuide as! NSLayoutGuide
         NSLayoutConstraint.activate([
@@ -57,6 +69,11 @@ final class NotePanel: NSPanel {
             scrollView.leadingAnchor.constraint(equalTo: background.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: background.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: background.bottomAnchor),
+            // Centred in the title bar band, clear of the close button and the ⌘N/⌘P buttons.
+            titleLabel.centerXAnchor.constraint(equalTo: background.centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: guide.topAnchor, constant: -14),
+            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: background.leadingAnchor, constant: 72),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: background.trailingAnchor, constant: -72),
         ])
 
         installTitlebarButtons()
@@ -108,8 +125,8 @@ final class NotePanel: NSPanel {
     @objc private func newNoteTapped() { onNewNoteButton?() }
     @objc private func switcherTapped() { onSwitcherButton?() }
 
-    /// Close button, title, and the ⌘N/⌘P buttons are mouse controls: visible only
-    /// while the pointer is over the window. The strip stays draggable either way.
+    /// Close button and the ⌘N/⌘P buttons are mouse controls: visible only while the
+    /// pointer is over the window. The title stays; the strip stays draggable either way.
     func setChrome(visible: Bool) {
         guard visible != isChromeVisible else { return }
         isChromeVisible = visible
@@ -121,7 +138,6 @@ final class NotePanel: NSPanel {
         standardWindowButton(.closeButton)?.isHidden = !visible
         titlebarButtons.isHidden = !visible
         titlebarButtons.view.isHidden = !visible // the controller flag alone is not reliable
-        title = visible ? noteTitle : ""
     }
 
     private func syncChromeWithMouse() {
@@ -202,7 +218,8 @@ final class NotePanel: NSPanel {
     func updateChrome() {
         let full = NoteLibrary.title(of: textView.string)
         noteTitle = full.count > 40 ? String(full.prefix(40)) + "…" : full
-        if isChromeVisible { title = noteTitle }
+        title = noteTitle // not drawn (titleVisibility = .hidden) but used by the system
+        titleLabel.stringValue = noteTitle
     }
 }
 
@@ -245,4 +262,9 @@ final class TitlebarButton: NSButton {
         }
         super.draw(dirtyRect)
     }
+}
+
+/// A label that never intercepts the mouse, so the title bar stays draggable through it.
+final class PassThroughLabel: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

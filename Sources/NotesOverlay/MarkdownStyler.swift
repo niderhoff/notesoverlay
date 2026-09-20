@@ -142,7 +142,9 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
     /// Width of the column that holds a list marker (bullet, checkbox, number); the item's
     /// text starts right after it, so all list kinds align.
     private var listMarkerArea: CGFloat { (baseFontSize * 1.6).rounded() }
-    static func checkboxSide(for fontSize: CGFloat) -> CGFloat { (fontSize * 0.8).rounded() }
+    static func checkboxSide(for fontSize: CGFloat) -> CGFloat { (fontSize * 0.95).rounded() }
+    /// Extra space after each list item (also on the raw line, so nothing jumps).
+    private var listParagraphSpacing: CGFloat { (baseFontSize * 0.35).rounded() }
 
     private func baseAttributes() -> [NSAttributedString.Key: Any] {
         [.font: baseFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: NSParagraphStyle.default]
@@ -271,6 +273,7 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             let spaceWidth = width(" ", baseFont)
             let checked = line[Range(m.range(at: 4), in: line)!].lowercased() == "x"
             let bracket = m.range(at: 3)
+            paragraphStyle.paragraphSpacing = listParagraphSpacing
             marker(NSRange(location: m.range(at: 2).location, length: 2)) // "- "
             if active {
                 let raw = NSRange(location: bracket.location, length: 3) // "[ ]"
@@ -298,6 +301,7 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             let indentWidth = width(String(line.prefix(m.range(at: 1).length)), baseFont)
             let spaceWidth = width(" ", baseFont)
             let dash = m.range(at: 2)
+            paragraphStyle.paragraphSpacing = listParagraphSpacing
             if active {
                 storage.addAttribute(.foregroundColor, value: listColor, range: absolute(dash))
                 paragraphStyle.headIndent = width(String(line.prefix(m.range.length)), baseFont)
@@ -316,6 +320,7 @@ final class MarkdownStyler: NSObject, NSTextStorageDelegate, NSLayoutManagerDele
             let spaceWidth = width(" ", baseFont)
             let number = m.range(at: 2)
             let numberWidth = width(String(line[Range(number, in: line)!]), baseFont)
+            paragraphStyle.paragraphSpacing = listParagraphSpacing
             storage.addAttribute(.foregroundColor, value: listColor, range: absolute(number))
             // Numbers end a small gap before the text column, so they right-align.
             let firstIndent = max(0, listMarkerArea - baseFontSize * 0.4 - numberWidth)
