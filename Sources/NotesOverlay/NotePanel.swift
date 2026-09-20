@@ -79,14 +79,15 @@ final class NotePanel: NSPanel {
     private func installTitlebarButtons() {
         let newButton = makeTitlebarButton("square.and.pencil", tip: "New Note (⌘N)", action: #selector(newNoteTapped))
         let switchButton = makeTitlebarButton("list.bullet", tip: "Switch Note (⌘P)", action: #selector(switcherTapped))
-        // 24pt buttons, 2pt apart, last glyph centred ~16pt from the edge: mirrors the
-        // traffic-light side and keeps the glyph gap close to a standard toolbar's.
+        // 24pt buttons, 2pt apart. Top/bottom insets make the row exactly the 28pt
+        // title-bar height so the buttons (and their hover highlight) sit centred, with
+        // the same breathing room above as to the right edge.
         let stack = NSStackView(views: [newButton, switchButton])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 2
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 4)
-        stack.frame = NSRect(x: 0, y: 0, width: 54, height: 28)
+        stack.edgeInsets = NSEdgeInsets(top: 2, left: 0, bottom: 2, right: 3)
+        stack.frame = NSRect(x: 0, y: 0, width: 53, height: 28)
         titlebarButtons.view = stack
         titlebarButtons.layoutAttribute = .trailing
         addTitlebarAccessoryViewController(titlebarButtons)
