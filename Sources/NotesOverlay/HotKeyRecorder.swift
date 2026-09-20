@@ -58,17 +58,18 @@ enum KeyLabel {
     }
 }
 
-/// Small window that captures the next key combination.
+/// Small panel that captures the next key combination. Non-activating, like the
+/// note panel: it takes keyboard input without making NotesOverlay the active app,
+/// so closing it hands focus straight back to whatever you were using.
 final class HotKeyRecorder: NSObject, NSWindowDelegate {
-    private var window: NSWindow?
+    private var panel: NSPanel?
     private var completion: ((HotKeyCombo?) -> Void)?
 
     /// `completion(nil)` means cancelled. The caller must unregister the live
     /// hotkey before presenting, otherwise the current combo can't be re-recorded.
     func present(current: HotKeyCombo, completion: @escaping (HotKeyCombo?) -> Void) {
-        if let window {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate()
+        if let panel {
+            panel.makeKeyAndOrderFront(nil)
             return
         }
         self.completion = completion
@@ -76,33 +77,37 @@ final class HotKeyRecorder: NSObject, NSWindowDelegate {
         let recorder = RecorderView(current: current)
         recorder.onResult = { [weak self] combo in self?.finish(with: combo) }
 
-        let w = NSWindow(
+        let p = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 180),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        w.title = "Change Hotkey"
-        w.isReleasedWhenClosed = false
-        w.level = .floating
-        w.delegate = self
-        w.contentView = recorder
-        w.center()
-        window = w
+        p.title = "Change Hotkey"
+        p.isFloatingPanel = true
+        p.level = .floating
+        p.hidesOnDeactivate = false
+        p.becomesKeyOnlyIfNeeded = false
+        p.isReleasedWhenClosed = false
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        p.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        p.standardWindowButton(.zoomButton)?.isHidden = true
+        p.delegate = self
+        p.contentView = recorder
+        p.center()
+        panel = p
 
-        // A regular window needs the app active to receive keyboard focus.
-        w.makeKeyAndOrderFront(nil)
-        NSApp.activate()
-        w.makeFirstResponder(recorder)
+        p.makeKeyAndOrderFront(nil)
+        p.makeFirstResponder(recorder)
     }
 
     private func finish(with combo: HotKeyCombo?) {
-        guard let w = window else { return }
+        guard let p = panel else { return }
         let done = completion
         completion = nil
-        window = nil
-        w.delegate = nil
-        w.orderOut(nil)
+        panel = nil
+        p.delegate = nil
+        p.orderOut(nil)
         done?(combo)
     }
 
@@ -110,7 +115,7 @@ final class HotKeyRecorder: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         let done = completion
         completion = nil
-        window = nil
+        panel = nil
         done?(nil)
     }
 }
@@ -138,6 +143,7 @@ final class RecorderView: NSView {
         hintLabel.font = .systemFont(ofSize: 11)
         hintLabel.textColor = .secondaryLabelColor
         hintLabel.alignment = .center
+        hintLabel.preferredMaxLayoutWidth = 360
         hintLabel.stringValue = "Include ⌃, ⌥ or ⌘.  Esc cancels, ⌫ restores \(HotKeyCombo.default.label)."
 
         let stack = NSStackView(views: [prompt, comboLabel, hintLabel])
@@ -147,10 +153,9 @@ final class RecorderView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -20),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
         ])
     }
 

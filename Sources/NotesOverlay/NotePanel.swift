@@ -29,7 +29,7 @@ final class NotePanel: NSPanel {
         becomesKeyOnlyIfNeeded = false
         titlebarAppearsTransparent = true
         isMovableByWindowBackground = true
-        animationBehavior = .utilityWindow
+        animationBehavior = .none // no fade/scale on show or hide
         minSize = NSSize(width: 280, height: 160)
         title = "Scratchpad"
         standardWindowButton(.miniaturizeButton)?.isHidden = true
