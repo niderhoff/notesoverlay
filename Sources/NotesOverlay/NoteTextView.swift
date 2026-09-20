@@ -74,7 +74,7 @@ final class NoteTextView: NSTextView {
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.drawsBackground = false
         textView.textColor = .labelColor
-        textView.insertionPointColor = .labelColor
+        textView.insertionPointColor = .controlAccentColor
         textView.applyFontSize(fontSize)
 
         let styler = MarkdownStyler(textView: textView, fontSize: fontSize)
