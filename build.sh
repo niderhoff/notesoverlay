@@ -6,7 +6,9 @@ cd "$(dirname "$0")"
 # Swift 6.4's default build system cannot initialize with the Command Line Tools alone
 # ("Could not initialize build system … Unknown error parsing property list");
 # fall back to the classic one in that case.
-swift build -c release || swift build -c release --build-system native
+if ! swift build -c release 2>/dev/null; then
+    swift build -c release --build-system native 2>&1 | grep -v "has been deprecated"
+fi
 
 APP=build/NotesOverlay.app
 rm -rf "$APP"
