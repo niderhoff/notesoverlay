@@ -13,6 +13,7 @@ final class NotePanel: NSPanel {
     var onSwitcherButton: (() -> Void)?
     private let titlebarButtons = NSTitlebarAccessoryViewController()
     private let effectView = NSVisualEffectView()
+    private let tintView = TintView()
     /// Our own title: regular weight, centred, always visible (the native one is bold and
     /// would be hidden with the rest of the chrome).
     private let titleLabel = PassThroughLabel(labelWithString: "Untitled")
@@ -47,22 +48,24 @@ final class NotePanel: NSPanel {
         standardWindowButton(.miniaturizeButton)?.isHidden = true
         standardWindowButton(.zoomButton)?.isHidden = true
 
-        // Solid background underneath, blurred material on top (toggled by the
-        // "Translucent Background" setting); everything else sits above both.
-        let background = OpaqueBackgroundView()
+        // Layers, bottom to top: solid colour (translucency Off), blurred material,
+        // a dark tint that tones the blur down (Reduced), then the content.
+        let background = SolidBackgroundView()
         contentView = background
         effectView.material = .hudWindow
         effectView.blendingMode = .behindWindow
         effectView.state = .active // default follows "window active", which we never are
-        effectView.translatesAutoresizingMaskIntoConstraints = false
-        background.addSubview(effectView)
-        NSLayoutConstraint.activate([
-            effectView.topAnchor.constraint(equalTo: background.topAnchor),
-            effectView.bottomAnchor.constraint(equalTo: background.bottomAnchor),
-            effectView.leadingAnchor.constraint(equalTo: background.leadingAnchor),
-            effectView.trailingAnchor.constraint(equalTo: background.trailingAnchor),
-        ])
-        setTranslucent(Settings.translucentBackground)
+        for layer in [effectView, tintView] {
+            layer.translatesAutoresizingMaskIntoConstraints = false
+            background.addSubview(layer)
+            NSLayoutConstraint.activate([
+                layer.topAnchor.constraint(equalTo: background.topAnchor),
+                layer.bottomAnchor.constraint(equalTo: background.bottomAnchor),
+                layer.leadingAnchor.constraint(equalTo: background.leadingAnchor),
+                layer.trailingAnchor.constraint(equalTo: background.trailingAnchor),
+            ])
+        }
+        setTranslucency(Settings.translucency)
 
         background.addSubview(scrollView)
 
@@ -111,9 +114,11 @@ final class NotePanel: NSPanel {
         applyChrome()
     }
 
-    /// Blurred material behind the note, or a solid background.
-    func setTranslucent(_ translucent: Bool) {
-        effectView.isHidden = !translucent
+    /// Full blur, blur toned down by a tint, or a solid background.
+    func setTranslucency(_ level: Translucency) {
+        effectView.isHidden = level == .off
+        tintView.isHidden = level != .reduced
+        (contentView as? SolidBackgroundView)?.drawsSolid = level == .off
     }
 
     // MARK: Hover chrome
@@ -299,14 +304,33 @@ final class PassThroughLabel: NSTextField {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// Solid window background used when translucency is off: near-black in dark mode,
-/// off-white in light mode.
-final class OpaqueBackgroundView: NSView {
+/// Window background: solid near-black (dark) / off-white (light) when translucency is
+/// off, otherwise transparent so the material behind shows.
+final class SolidBackgroundView: NSView {
+    var drawsSolid = false { didSet { needsDisplay = true } }
+
     private static let color = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             ? NSColor(white: 0.11, alpha: 1)
             : NSColor(white: 0.97, alpha: 1)
     }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard drawsSolid else { return }
+        Self.color.setFill()
+        dirtyRect.fill()
+    }
+}
+
+/// Semi-opaque wash over the blurred material for the "Reduced" translucency level.
+final class TintView: NSView {
+    private static let color = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 0.0, alpha: 0.55)
+            : NSColor(white: 1.0, alpha: 0.55)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func draw(_ dirtyRect: NSRect) {
         Self.color.setFill()

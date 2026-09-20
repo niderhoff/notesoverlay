@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     private var toggleItem: NSMenuItem!
     private var folderItem: NSMenuItem!
     private var accentItems: [NSMenuItem] = []
-    private var translucentItem: NSMenuItem!
+    private var translucencyItems: [NSMenuItem] = []
     private var launchAtLoginItem: NSMenuItem!
 
     // MARK: Lifecycle
@@ -470,9 +470,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
             accentItems.append(item)
         }
         appearance.addItem(.separator())
-        translucentItem = NSMenuItem(title: "Translucent Background", action: #selector(toggleTranslucency), keyEquivalent: "")
-        translucentItem.target = self
-        appearance.addItem(translucentItem)
+        for level in Translucency.allCases {
+            let item = NSMenuItem(title: "Translucency: \(level.title)", action: #selector(chooseTranslucency(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = level.rawValue
+            appearance.addItem(item)
+            translucencyItems.append(item)
+        }
         let appearanceItem = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
         appearanceItem.submenu = appearance
         menu.addItem(appearanceItem)
@@ -508,7 +512,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         for item in accentItems {
             item.state = (item.representedObject as? String) == Settings.accent.rawValue ? .on : .off
         }
-        translucentItem?.state = Settings.translucentBackground ? .on : .off
+        for item in translucencyItems {
+            item.state = (item.representedObject as? String) == Settings.translucency.rawValue ? .on : .off
+        }
     }
 
     @objc private func chooseAccent(_ sender: NSMenuItem) {
@@ -518,9 +524,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         updateAppearanceItems()
     }
 
-    @objc private func toggleTranslucency() {
-        Settings.translucentBackground.toggle()
-        panel.setTranslucent(Settings.translucentBackground)
+    @objc private func chooseTranslucency(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let level = Translucency(rawValue: raw) else { return }
+        Settings.translucency = level
+        panel.setTranslucency(level)
         updateAppearanceItems()
     }
 

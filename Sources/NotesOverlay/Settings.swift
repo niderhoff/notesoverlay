@@ -59,6 +59,19 @@ enum AccentChoice: String, CaseIterable {
     }
 }
 
+/// How much of what is behind the window shows through.
+enum Translucency: String, CaseIterable {
+    case full, reduced, off
+
+    var title: String {
+        switch self {
+        case .full: return "Full"
+        case .reduced: return "Reduced"
+        case .off: return "Off"
+        }
+    }
+}
+
 /// UserDefaults-backed settings. Domain is the bundle identifier (com.niid.NotesOverlay)
 /// when running from the .app bundle.
 enum Settings {
@@ -71,7 +84,8 @@ enum Settings {
         static let hotKeyEquivalent = "hotKeyEquivalent"
         static let fontSize = "fontSize"
         static let accent = "accentColor"
-        static let translucent = "translucentBackground"
+        static let translucent = "translucentBackground" // pre-1.2 on/off
+        static let translucency = "translucency"
         static let notePath = "notePath" // 1.0: the single note file
         static let notesDirectory = "notesDirectory"
         static let didMigrateLegacyNote = "didMigrateLegacyNote"
@@ -119,9 +133,13 @@ enum Settings {
         set { defaults.set(newValue.rawValue, forKey: Key.accent) }
     }
 
-    static var translucentBackground: Bool {
-        get { defaults.object(forKey: Key.translucent) == nil ? true : defaults.bool(forKey: Key.translucent) }
-        set { defaults.set(newValue, forKey: Key.translucent) }
+    static var translucency: Translucency {
+        get {
+            if let raw = defaults.string(forKey: Key.translucency), let level = Translucency(rawValue: raw) { return level }
+            if defaults.object(forKey: Key.translucent) != nil, !defaults.bool(forKey: Key.translucent) { return .off }
+            return .reduced
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.translucency) }
     }
 
     // MARK: Notes location

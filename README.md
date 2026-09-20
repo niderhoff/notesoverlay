@@ -48,8 +48,8 @@ offered when the app runs from `/Applications`.
 ## Appearance
 
 Menu bar icon → **Appearance**: pick the highlight colour (Red, Blue, or the System Accent) used
-for bullets, checkboxes, list numbers and the cursor, and toggle **Translucent Background**
-(off = solid dark/light background instead of the blurred material).
+for bullets, checkboxes, list numbers and the cursor, and set **Translucency**: Full (blurred
+material), Reduced (the blur toned down by a dark tint, the default) or Off (solid background).
 
 ## Change the hotkey
 
