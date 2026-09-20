@@ -15,6 +15,7 @@ final class NotePanel: NSPanel {
     private let titlebarButtons = NSTitlebarAccessoryViewController()
     private var noteTitle = "Untitled"
     private(set) var isChromeVisible = false
+    private var hoverTimer: Timer?
 
     init(fontSize: CGFloat) {
         let pair = NoteTextView.makeScrollable(fontSize: fontSize)
@@ -81,7 +82,7 @@ final class NotePanel: NSPanel {
         center()
         _ = setFrameAutosaveName(Self.frameAutosaveName) // restores a saved frame immediately
         updateChrome()
-        setChrome(visible: false)
+        applyChrome()
     }
 
     // MARK: Hover chrome
@@ -117,12 +118,25 @@ final class NotePanel: NSPanel {
     /// Close button, title, and the ⌘N/⌘P buttons are mouse controls: visible only
     /// while the pointer is over the window. The strip stays draggable either way.
     func setChrome(visible: Bool) {
+        guard visible != isChromeVisible else { return }
         isChromeVisible = visible
+        applyChrome()
+    }
+
+    private func applyChrome() {
+        let visible = isChromeVisible
         standardWindowButton(.closeButton)?.isHidden = !visible
         titlebarButtons.isHidden = !visible
+        titlebarButtons.view.isHidden = !visible // the controller flag alone is not reliable
         title = visible ? noteTitle : ""
     }
 
+    private func syncChromeWithMouse() {
+        setChrome(visible: frame.contains(NSEvent.mouseLocation))
+    }
+
+    // Tracking-area events give instant response; the timer in show() is the
+    // fallback in case AppKit withholds enter/exit events from a never-active app.
     override func mouseEntered(with event: NSEvent) {
         setChrome(visible: true)
     }
@@ -177,11 +191,17 @@ final class NotePanel: NSPanel {
         makeKeyAndOrderFront(nil)
         makeFirstResponder(textView)
         // No mouseEntered fires if the pointer is already inside when we appear.
-        setChrome(visible: frame.contains(NSEvent.mouseLocation))
+        syncChromeWithMouse()
+        hoverTimer?.invalidate()
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            self?.syncChromeWithMouse()
+        }
     }
 
     func hide() {
         orderOut(nil)
+        hoverTimer?.invalidate()
+        hoverTimer = nil
         setChrome(visible: false)
     }
 
