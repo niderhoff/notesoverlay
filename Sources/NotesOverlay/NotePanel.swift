@@ -326,8 +326,8 @@ final class SolidBackgroundView: NSView {
 final class TintView: NSView {
     private static let color = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(white: 0.0, alpha: 0.55)
-            : NSColor(white: 1.0, alpha: 0.55)
+            ? NSColor(white: 0.0, alpha: 0.3)
+            : NSColor(white: 1.0, alpha: 0.3)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
