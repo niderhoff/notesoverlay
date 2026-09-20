@@ -6,13 +6,21 @@ final class NoteTextView: NSTextView {
     /// Esc, ⌘W, or anything else that should hide the panel.
     var onDismiss: (() -> Void)?
     var onFontSizeChange: ((CGFloat) -> Void)?
+    /// ⌘P: open the note switcher.
+    var onSwitcher: (() -> Void)?
+    /// ⌘N: create a new note.
+    var onNewNote: (() -> Void)?
 
     private static let minFontSize: CGFloat = 9
     private static let maxFontSize: CGFloat = 48
 
     /// Builds the scroll view + text view pair with the standard wrapping setup.
     static func makeScrollable(fontSize: CGFloat) -> (scrollView: NSScrollView, textView: NoteTextView) {
-        let scrollView = NSScrollView()
+        // Same initial frame for both: NSClipView resizes the document view by the
+        // *delta* of its own width change, so starting the scroll view at zero width
+        // would leave the text view wider than the visible area (and clip long lines).
+        let initialSize = NSSize(width: 480, height: 360)
+        let scrollView = NSScrollView(frame: NSRect(origin: .zero, size: initialSize))
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
@@ -20,13 +28,14 @@ final class NoteTextView: NSTextView {
         scrollView.borderType = .noBorder
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        let textView = NoteTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
-        textView.minSize = NSSize(width: 0, height: 0)
+        let contentSize = scrollView.contentSize
+        let textView = NoteTextView(frame: NSRect(origin: .zero, size: contentSize))
+        textView.minSize = NSSize(width: 0, height: contentSize.height)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
-        textView.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.containerSize = NSSize(width: contentSize.width, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
 
         // Strictly plain text, no "smart" rewriting of what was typed.
@@ -65,11 +74,15 @@ final class NoteTextView: NSTextView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // Only while we have focus: the switcher's search field lives in the same window.
+        guard window?.firstResponder === self else { return super.performKeyEquivalent(with: event) }
         let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
         guard mods.contains(.command), let key = event.charactersIgnoringModifiers?.lowercased() else {
             return super.performKeyEquivalent(with: event)
         }
         switch (key, mods) {
+        case ("p", [.command]): onSwitcher?()
+        case ("n", [.command]): onNewNote?()
         case ("c", [.command]): copy(nil)
         case ("v", [.command]): paste(nil)
         case ("x", [.command]): cut(nil)

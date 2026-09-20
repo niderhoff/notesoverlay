@@ -30,8 +30,8 @@ final class NotePanel: NSPanel {
         titlebarAppearsTransparent = true
         isMovableByWindowBackground = true
         animationBehavior = .none // no fade/scale on show or hide
-        minSize = NSSize(width: 280, height: 160)
-        title = "Scratchpad"
+        minSize = NSSize(width: 320, height: 240)
+        title = "Untitled"
         standardWindowButton(.miniaturizeButton)?.isHidden = true
         standardWindowButton(.zoomButton)?.isHidden = true
 
@@ -70,6 +70,45 @@ final class NotePanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    // MARK: Note switcher overlay
+
+    private(set) var switcher: NoteSwitcherView?
+    var isSwitcherVisible: Bool { switcher != nil }
+
+    func presentSwitcher(notes: [NoteInfo], current: URL?, delegate: NoteSwitcherDelegate) {
+        if let switcher {
+            switcher.beginSession(notes: notes, current: current)
+            return
+        }
+        guard let background = contentView else { return }
+        let view = NoteSwitcherView(frame: background.bounds)
+        view.delegate = delegate
+        view.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(view)
+        let guide = contentLayoutGuide as! NSLayoutGuide
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: background.topAnchor),
+            view.leadingAnchor.constraint(equalTo: background.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: background.trailingAnchor),
+            view.bottomAnchor.constraint(equalTo: background.bottomAnchor),
+            view.card.topAnchor.constraint(equalTo: guide.topAnchor, constant: 8),
+        ])
+        switcher = view
+        background.layoutSubtreeIfNeeded()
+        view.beginSession(notes: notes, current: current)
+    }
+
+    func refreshSwitcher(notes: [NoteInfo], current: URL?) {
+        switcher?.update(notes: notes, current: current)
+    }
+
+    func dismissSwitcher() {
+        guard let switcher else { return }
+        switcher.removeFromSuperview()
+        self.switcher = nil
+        makeFirstResponder(textView)
+    }
+
     func show() {
         makeKeyAndOrderFront(nil)
         makeFirstResponder(textView)
@@ -82,17 +121,8 @@ final class NotePanel: NSPanel {
     /// Title = first non-empty line, footer = character count.
     func updateChrome() {
         let text = textView.string
-        let firstLine = text
-            .split(whereSeparator: \.isNewline)
-            .lazy
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty }
-
-        if let firstLine {
-            title = firstLine.count > 40 ? String(firstLine.prefix(40)) + "…" : firstLine
-        } else {
-            title = "Scratchpad"
-        }
+        let noteTitle = NoteLibrary.title(of: text)
+        title = noteTitle.count > 40 ? String(noteTitle.prefix(40)) + "…" : noteTitle
 
         let count = text.count
         footerLabel.stringValue = count == 1 ? "1 character" : "\(count) characters"

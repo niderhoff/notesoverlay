@@ -41,9 +41,16 @@ enum Settings {
         static let hotKeyModifiers = "hotKeyModifiers"
         static let hotKeyLabel = "hotKeyLabel"
         static let hotKeyEquivalent = "hotKeyEquivalent"
-        static let notePath = "notePath"
         static let fontSize = "fontSize"
+        static let notePath = "notePath" // 1.0: the single note file
+        static let notesDirectory = "notesDirectory"
+        static let didMigrateLegacyNote = "didMigrateLegacyNote"
+        static let currentNote = "currentNote"
+        static let pinnedNotes = "pinnedNotes"
+        static let lastOpened = "lastOpened"
     }
+
+    // MARK: Hotkey
 
     static var hotKey: HotKeyCombo {
         get {
@@ -65,14 +72,7 @@ enum Settings {
         }
     }
 
-    /// Absolute path of the note file. Override with:
-    ///   defaults write com.niid.NotesOverlay notePath ~/somewhere/else.txt
-    static var notePath: String {
-        if let custom = defaults.string(forKey: Key.notePath), !custom.isEmpty {
-            return (custom as NSString).expandingTildeInPath
-        }
-        return (NSHomeDirectory() as NSString).appendingPathComponent("Notes/scratchpad.txt")
-    }
+    // MARK: Editor
 
     static var fontSize: CGFloat {
         get {
@@ -80,5 +80,83 @@ enum Settings {
             return stored > 0 ? CGFloat(stored) : 16
         }
         set { defaults.set(Double(newValue), forKey: Key.fontSize) }
+    }
+
+    // MARK: Notes location
+
+    /// Folder holding one .txt file per note. Override with:
+    ///   defaults write com.niid.NotesOverlay notesDirectory ~/somewhere
+    static var notesDirectory: URL {
+        if let custom = defaults.string(forKey: Key.notesDirectory), !custom.isEmpty {
+            return URL(fileURLWithPath: (custom as NSString).expandingTildeInPath, isDirectory: true)
+        }
+        return URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent("Notes/NotesOverlay", isDirectory: true)
+    }
+
+    /// Where 1.0 kept its single note. Moved into `notesDirectory` on first launch.
+    static var legacyNotePath: String {
+        if let custom = defaults.string(forKey: Key.notePath), !custom.isEmpty {
+            return (custom as NSString).expandingTildeInPath
+        }
+        return (NSHomeDirectory() as NSString).appendingPathComponent("Notes/scratchpad.txt")
+    }
+
+    static var didMigrateLegacyNote: Bool {
+        get { defaults.bool(forKey: Key.didMigrateLegacyNote) }
+        set { defaults.set(newValue, forKey: Key.didMigrateLegacyNote) }
+    }
+
+    // MARK: Per-note metadata, keyed by file name
+
+    /// The note to reopen at launch.
+    static var currentNote: String? {
+        get { defaults.string(forKey: Key.currentNote) }
+        set { defaults.set(newValue, forKey: Key.currentNote) }
+    }
+
+    static var pinnedNotes: [String] {
+        get { defaults.stringArray(forKey: Key.pinnedNotes) ?? [] }
+        set { defaults.set(newValue, forKey: Key.pinnedNotes) }
+    }
+
+    static var lastOpened: [String: Date] {
+        get {
+            let raw = defaults.dictionary(forKey: Key.lastOpened) as? [String: Double] ?? [:]
+            return raw.mapValues { Date(timeIntervalSince1970: $0) }
+        }
+        set { defaults.set(newValue.mapValues { $0.timeIntervalSince1970 }, forKey: Key.lastOpened) }
+    }
+
+    static func markOpened(_ filename: String) {
+        var opened = lastOpened
+        opened[filename] = Date()
+        lastOpened = opened
+    }
+
+    static func togglePin(_ filename: String) {
+        var pinned = pinnedNotes
+        if let index = pinned.firstIndex(of: filename) {
+            pinned.remove(at: index)
+        } else {
+            pinned.append(filename)
+        }
+        pinnedNotes = pinned
+    }
+
+    static func renameMetadata(from old: String, to new: String) {
+        pinnedNotes = pinnedNotes.map { $0 == old ? new : $0 }
+        var opened = lastOpened
+        if let date = opened.removeValue(forKey: old) { opened[new] = date }
+        lastOpened = opened
+        if currentNote == old { currentNote = new }
+    }
+
+    static func removeMetadata(for filename: String) {
+        pinnedNotes = pinnedNotes.filter { $0 != filename }
+        var opened = lastOpened
+        opened.removeValue(forKey: filename)
+        lastOpened = opened
+        if currentNote == filename { currentNote = nil }
     }
 }

@@ -3,8 +3,8 @@ import Foundation
 /// Owns the single plain-text note file: load, debounced atomic save, and reload
 /// when something else edits the file.
 final class NoteStore {
-    let fileURL: URL
-    private let directoryURL: URL
+    private(set) var fileURL: URL
+    private var directoryURL: URL { fileURL.deletingLastPathComponent() }
 
     /// Last text we loaded, wrote, or reloaded. Used to ignore our own writes.
     private(set) var lastKnownText = ""
@@ -19,9 +19,8 @@ final class NoteStore {
     private var watchedInode: ino_t = 0
     private var syncWorkItem: DispatchWorkItem?
 
-    init(path: String) {
-        fileURL = URL(fileURLWithPath: path)
-        directoryURL = fileURL.deletingLastPathComponent()
+    init(url: URL) {
+        fileURL = url
     }
 
     /// Creates the folder and an empty file on first run, then returns the contents.
@@ -63,6 +62,23 @@ final class NoteStore {
         } catch {
             NSLog("NotesOverlay: failed to save \(fileURL.path): \(error)")
         }
+    }
+
+    /// Renames the note file (same folder) and keeps watching it.
+    func moveFile(to newURL: URL) throws {
+        flush()
+        try FileManager.default.moveItem(at: fileURL, to: newURL)
+        fileURL = newURL
+        if directorySource != nil { armFileWatcher() }
+    }
+
+    /// Drops pending saves and stops watching. Used when switching or trashing notes.
+    func discard() {
+        saveTimer?.invalidate()
+        saveTimer = nil
+        pendingText = nil
+        syncWorkItem?.cancel()
+        stopWatching()
     }
 
     // MARK: External changes

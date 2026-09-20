@@ -1,12 +1,28 @@
 # NotesOverlay
 
-One plain-text scratchpad in a floating window, toggled with a global hotkey.
+Plain-text notes in a floating window, toggled with a global hotkey.
 Menu-bar-only macOS app, pure Swift + AppKit, no dependencies, no Xcode project.
 
-- **Hotkey** (default ⌃⌥Space) toggles the note. Visible but unfocused → focuses it. Focused → hides it.
+- **Hotkey** (default ⌃⌥Space) toggles the note window. Visible but unfocused → focuses it. Focused → hides it.
 - **Esc**, **⌘W**, or the red close button hide it. It stays on top of everything, including full-screen apps, and follows you across Spaces.
-- The note lives in **`~/Notes/scratchpad.txt`** as plain text. It autosaves while you type and reloads when another program changes the file.
+- Notes are **plain `.txt` files in `~/Notes/NotesOverlay/`**, one per note, named after the note's first line. They autosave while you type and reload when another program changes the file.
 - Title bar shows the first line, footer shows the character count. **⌘+ / ⌘−** change the font size.
+
+## Switching notes (⌘P)
+
+Inside the note window, **⌘P** opens the note switcher:
+
+| Key | Action |
+|---|---|
+| type | fuzzy-filter notes by title and content |
+| ↑ ↓ | move selection (opens with the previously used note preselected, so ⌘P ↩ toggles between two notes) |
+| ↩ | open the selected note, or create a note titled with the query when nothing matches |
+| ⌘N | new empty note (also works in the editor) |
+| ⌘⇧P | pin / unpin the selected note (pinned notes sort first) |
+| ⌘⌫ | move the selected note to the macOS Trash (recoverable, no confirmation) |
+| Esc, ⌘P | close the switcher |
+
+Rows show the title plus "Current", or when the note was last opened, and its character count.
 
 ## Build & run
 
@@ -26,14 +42,18 @@ Menu bar icon → **Change Hotkey…** → press the new combination. It must in
 Esc cancels, ⌫ restores ⌃⌥Space. If macOS or another app already owns a combination,
 NotesOverlay tells you and lets you pick another.
 
-## Change where the note is stored
+## Change where notes are stored
 
 ```sh
-defaults write com.niid.NotesOverlay notePath ~/Documents/scratchpad.txt
+defaults write com.niid.NotesOverlay notesDirectory ~/Documents/Notes
 ```
 
-Restart the app afterwards. Delete the key to go back to `~/Notes/scratchpad.txt`:
+Restart the app afterwards; move the existing `.txt` files yourself. Delete the key to go
+back to `~/Notes/NotesOverlay/`:
 
 ```sh
-defaults delete com.niid.NotesOverlay notePath
+defaults delete com.niid.NotesOverlay notesDirectory
 ```
+
+Notes are renamed to match their first line when you hide the window or switch notes.
+Pinned state and "last opened" times are kept in the app's preferences, keyed by file name.
