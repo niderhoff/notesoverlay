@@ -22,7 +22,7 @@ BUILD=$(( $(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Resources/Info.p
 ./build.sh
 ZIP="build/NotesOverlay-$VERSION.zip"
 rm -f "$ZIP"
-ditto -c -k --keepParent build/NotesOverlay.app "$ZIP"
+ditto -c -k --keepParent --norsrc build/NotesOverlay.app "$ZIP"
 SHA=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)
 echo "built $ZIP  sha256 $SHA"
 
