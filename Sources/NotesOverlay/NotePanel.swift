@@ -95,7 +95,7 @@ final class NotePanel: NSPanel {
     private func makeTitlebarButton(_ symbol: String, tip: String, action: Selector) -> NSButton {
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)!
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .medium))!
-        let button = FirstMouseButton(image: image, target: self, action: action)
+        let button = TitlebarButton(image: image, target: self, action: action)
         button.isBordered = false
         button.contentTintColor = .secondaryLabelColor
         button.toolTip = tip
@@ -205,7 +205,43 @@ final class NotePanel: NSPanel {
     }
 }
 
-/// Reacts to the first click even when the panel is not the key window.
-final class FirstMouseButton: NSButton {
+/// Borderless icon button for the title bar: reacts to the first click even when the
+/// panel is not the key window, and shows a rounded highlight while hovered.
+final class TitlebarButton: NSButton {
+    private var hovered = false {
+        didSet {
+            contentTintColor = hovered ? .labelColor : .secondaryLabelColor
+            needsDisplay = true
+        }
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
+    /// No mouseExited arrives when the whole bar hides under the pointer.
+    override func viewDidHide() {
+        super.viewDidHide()
+        hovered = false
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if hovered {
+            NSColor.labelColor.withAlphaComponent(0.12).setFill()
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6).fill()
+        }
+        super.draw(dirtyRect)
+    }
 }
