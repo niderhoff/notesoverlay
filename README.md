@@ -51,7 +51,7 @@ make release VERSION=1.2.0
 
 ## Build & run
 
-Requires the Xcode Command Line Tools (`xcode-select --install`), macOS 14+.
+Requires the Xcode Command Line Tools (`xcode-select --install`), macOS 14+ on Apple silicon.
 
 ```sh
 make run        # build, then open build/NotesOverlay.app
